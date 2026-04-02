@@ -9,20 +9,26 @@ The main function for fitting models is `bmm()`. This function is the main entry
 ``` r
 bmm <- function(formula, data, model,
                 prior = NULL,
-                sort_data = getOption('bmm.sort_data', "check"),
-                silent = getOption('bmm.silent', 1),
-                backend = getOption('brms.backend', NULL),
+                sort_data = getOption("bmm.sort_data", "check"),
+                silent = getOption("bmm.silent", 1),
+                backend = getOption("brms.backend", NULL),
                 file = NULL, file_compress = TRUE,
-                file_refit = getOption('bmm.file_refit', FALSE), ...) {
+                file_refit = getOption("bmm.file_refit", FALSE), ...) {
   deprecated_args(...)
   dots <- list(...)
 
-  x <- read_bmmfit(file, file_refit)
-  if (!is.null(x)) return(x)
+  # check if the model has been previously fit and return it if requested
+  x <- try_read_bmmfit(file, file_refit)
+  if (!is.null(x)) {
+    return(x)
+  }
 
   # set temporary global options and return modified arguments for brms
-  configure_opts <- nlist(sort_data, silent, backend, parallel = dots$parallel,
-                          cores = dots$cores)
+  configure_opts <- nlist(
+    sort_data, silent, backend,
+    parallel = dots$parallel,
+    cores = dots$cores
+  )
   opts <- configure_options(configure_opts)
   dots$parallel <- NULL
 
@@ -38,55 +44,62 @@ bmm <- function(formula, data, model,
   # configure the default prior and combine with user-specified prior
   prior <- configure_prior(model, data, config_args$formula, prior)
 
+  # configure initial values if necessary
+  config_args$init <- create_initfun(model, data, config_args$formula)
+
   # estimate the model
   fit_args <- combine_args(nlist(config_args, opts, dots, prior))
-  fit <- call_brm(fit_args)
+  fit <- brms::do_call(brms::brm, fit_args)
 
   # model post-processing
-  fit <- postprocess_brm(model, fit, fit_args = fit_args, user_formula = user_formula,
-                         configure_opts = configure_opts)
+  fit <- postprocess_brm(
+    model, fit,
+    fit_args = fit_args,
+    user_formula = user_formula,
+    configure_opts = configure_opts
+  )
 
-  # save the fitted model object if !is.null
-  save_bmmfit(fit, file, compress = file_compress)
+  # save the fitted model object if file argument provided and return the object
+  try_save_bmmfit(fit, file, compress = file_compress)
 }
 ```
 
 It calls several subroutines, implemented as generic S3 methods, to:
 
--   `configure_options()` - to configure local options for fitting, such as parallel sampling,
--   `check_model()` - check if the model exists
--   `check_formula()` - check if the formula is specified correctly and transform it to a brmsformula
--   `check_data()` - check whether the data contains all necessary information
--   `configure_model()` - configures the model called for fitting
--   `configure_prior()` - sets the default priors for the model and combines them with the user prior
--   `call_brm()` - fit the model using the `brm()` function from the `brms` package
--   `postprocess_brm()` - to post-process the fitted model
+-   `configure_options()` - configure local options for fitting, such as parallel sampling
+-   `check_model()` - check if the model exists and is valid
+-   `check_data()` - check whether the data contains all necessary information and transform it
+-   `check_formula()` - check if the formula is specified correctly
+-   `configure_model(model, data, formula)` - configure the model specification (formula, family, Stan code) to pass to brms
+-   `configure_prior()` - set the default priors for the model and combine them with the user prior
+-   `create_initfun()` - create an initial values function for MCMC sampling
+-   `postprocess_brm()` - post-process the fitted model (e.g., adjust link functions, add metadata)
 
-In addition, it also tests if the specified `bmmodel` has already been estimated and saved to a `file`. This is done via the `read_bmmfit` and `save_bmmfit` functions.
+In addition, it also tests if the specified `bmmodel` has already been estimated and saved to a `file`. This is done via the `try_read_bmmfit` and `try_save_bmmfit` functions.
 
 ## Models
 
 All models in the package are defined as S3 classes and follow a strict template. This allows us to implement general methods for handling model fitting, data checking, and post-processing. Each model has an internal function that defines the model and its parameters, and a user-facing alias. For a complete example model file and an explanation, see [Section @sec-example-model]. The general model template looks like this:
 
 ``` r
-.model_my_new_model <- function(resp_var1 = NULL, required_args1 = NULL, 
+.model_my_new_model <- function(resp_var1 = NULL, required_arg1 = NULL,
                                 required_arg2 = NULL, links = NULL, version = NULL,
                                 call = NULL, ...) {
   out <- structure(
     list(
-      resp_vars = nlist(resp_error),
+      resp_vars = nlist(resp_var1),
       other_vars = nlist(),
       domain = "",
       task = "",
       name = "",
-      version = "",
+      version = version,
       citation = "",
       requirements = "",
       parameters = list(),
       links = list(),
       fixed_parameters = list(),
       default_priors = list(),
-      version = version,
+      init_ranges = NULL,
       void_mu = FALSE
     ),
     class = c("bmmodel", "my_new_model"),
@@ -97,25 +110,37 @@ All models in the package are defined as S3 classes and follow a strict template
 }
 ```
 
+Key fields in the model definition:
+
+-   `resp_vars` - Named list of response variable(s) the user must provide in their data
+-   `other_vars` - Named list of additional variables (e.g., non-target features, set size)
+-   `parameters` - Named list of model parameters with descriptions
+-   `links` - Named list of link functions for each parameter (e.g., `"log"`, `"identity"`, `"logit"`, `"tan_half"`)
+-   `fixed_parameters` - Named list of parameters fixed to constant values (e.g., `list(mu = 0)`)
+-   `default_priors` - Named list with `main` (intercept) and `effects` (slopes) priors per parameter
+-   `init_ranges` - Named list of `c(lower, upper)` vectors for MCMC initialization (see [The `init_ranges` field and `create_initfun()`](#the-init_ranges-field-and-create_initfun))
+-   `void_mu` - Logical; whether the model has no natural `mu` parameter (see [The `void_mu` pattern])
+
 Each model is accompanied by a user-facing alias, the documentation of which is generated automatically based on the info list in the model definition.
 
 ``` r
 # user facing alias
 # information in the title and details sections will be filled in
 # automatically based on the information in the .model_modelname()$info
-#' @title `r .model_my_new_model()name`
-#' @name Model Name#' @details `r model_info(.model_my_new_model())`
+#' @title `r .model_my_new_model()$name`
+#' @name my_new_model
+#' @details `r model_info(.model_my_new_model())`
 #' @param resp_var1 A description of the response variable
 #' @param required_arg1 A description of the required argument
 #' @param required_arg2 A description of the required argument
 #' @param ... used internally for testing, ignore it
-#' @return An object of class `bmmmodel`
+#' @return An object of class `bmmodel`
 #' @export
 #' @examples
 #' \dontrun{
-#' # put a full example here (see 'R/bmm_model_mixture3p.R' for an example)
+#' # put a full example here (see 'R/model_mixture3p.R' for an example)
 #' }
-my_new_model <- function(resp_var1, required_arg1, required_arg2, 
+my_new_model <- function(resp_var1, required_arg1, required_arg2,
                          links = NULL, version = NULL, ...) {
   call <- match.call()
   stop_missing_args()
@@ -128,22 +153,133 @@ my_new_model <- function(resp_var1, required_arg1, required_arg2,
 Then users can fit the model using the `bmm()` function, and the model will be automatically recognized and handled by the package:
 
 ``` r
-fit <- bmm(formula = my_bmmformula, 
-           data = my_data, 
+fit <- bmm(formula = my_bmmformula,
+           data = my_data,
            model = my_new_model(resp_var1, required_arg1, required_arg2))
 ```
 
-## S3 methods
+## Model domains and class chains
 
-The package uses S3 methods to handle different models. This means that the same function can behave differently depending on the class of the object it is called with. For example, the `configure_model(model)` function called by `fit_model()`, is generally defined as:
+Models use hierarchical S3 class chains that encode the model taxonomy. The class chain determines which S3 methods are dispatched. The general pattern is:
 
 ``` r
-configure_model <- function(model) {
+class = c("bmmodel", <domain/intermediate>, <model>, <version>)
+```
+
+The current model families and their class chains are:
+
+**Circular / Visual working memory models:**
+
+-   `mixture2p`: `c("bmmodel", "circular", "mixture2p")`
+-   `mixture3p`: `c("bmmodel", "circular", "non_targets", "mixture3p")`
+-   `imm` (full): `c("bmmodel", "circular", "non_targets", "imm", "imm_full")`
+-   `sdm`: `c("bmmodel", "circular", "sdm", "sdm_simple")`
+
+**Response time / Decision models:**
+
+-   `ddm`: `c("bmmodel", "ddm")`
+-   `ezdm` (3par): `c("bmmodel", "ezdm", "ezdm_3par")`
+-   `cswald` (simple): `c("bmmodel", "cswald", "cswald_simple")`
+
+**Categorical response models:**
+
+-   `m3` (ss): `c("bmmodel", "m3", "m3_ss")`
+
+Intermediate classes like `"circular"` and `"non_targets"` allow shared `check_data` methods (e.g., `check_data.circular` validates that responses are in radians, `check_data.non_targets` validates non-target feature columns). S3 methods chain via `NextMethod()` from specific to general.
+
+## S3 methods
+
+The package uses S3 methods to handle different models. This means that the same function can behave differently depending on the class of the object it is called with. For example, the `configure_model(model, data, formula)` function called by `bmm()`, is generally defined as:
+
+``` r
+configure_model <- function(model, data, formula) {
    UseMethod('configure_model')
 }
 ```
 
-and it will call a function `configure_model.modelname()` that is specified for each model. The same is true for other functions, such as `check_data()`, `postprocess_brm()`, and `check_formula()`. This allows us to add new models without having to edit the main fitting function, `bmm()`.
+and it will call a function `configure_model.modelname()` that is specified for each model. The same is true for other functions, such as `check_data()`, `check_formula()`, `configure_prior()`, `create_initfun()`, and `postprocess_brm()`. This allows us to add new models without having to edit the main fitting function, `bmm()`.
+
+The key S3 generics in the pipeline are:
+
+| Generic | Signature | Defined in |
+|---------------------|-------------------------|---------------------------|
+| `check_model` | `(model, data, formula)` | `helpers-model.R` |
+| `check_data` | `(model, data, formula)` | `helpers-data.R` |
+| `check_formula` | `(model, data, formula)` | `bmmformula.R` |
+| `configure_model` | `(model, data, formula)` | `helpers-model.R` |
+| `configure_prior` | `(model, data, formula, user_prior)` | `helpers-prior.R` |
+| `create_initfun` | `(model, data, formula)` | `helpers-inits.R` |
+| `postprocess_brm` | `(model, fit, ...)` | `helpers-postprocess.R` |
+| `bmf2bf` | `(model, formula)` | `bmmformula.R` |
+
+The `bmf2bf` generic converts a `bmmformula` to a `brmsformula`. Most models use the default `bmf2bf.bmmodel` method, but some models require custom methods to handle response variable wrapping (e.g., `bmf2bf.ddm` wraps the response as `rt | dec(response) ~ 1`) or multiple response variables (e.g., `bmf2bf.ezdm_3par` packs variables via `vreal()`, `vint()`, `trials()`). Currently, model-specific `bmf2bf` methods exist for: `ddm`, `cswald`, `ezdm_3par`, `ezdm_4par`, and `m3`.
+
+## The `void_mu` pattern
+
+The `brms` package requires every custom family to have a `mu` parameter (the location parameter). However, some models -- particularly response time and decision models like DDM, EZDM, and cswald -- do not have a natural location/mu parameter. For these models, setting `void_mu = TRUE` in the model definition signals to the package infrastructure that:
+
+1.  A dummy `mu` parameter is included in the family's `dpars` with an `identity` link
+2.  The `mu` intercept is fixed to 0 via `fixed_parameters = list(mu = 0)`
+3.  Users do not specify formulas for `mu` in their `bmmformula`
+4.  The `bmf2bf` method for these models constructs the first formula line differently (e.g., `rt | dec(response) ~ 1` for DDM, rather than using `mu` as a response)
+
+This is purely a technical workaround to satisfy brms requirements. The fixed `mu = 0` prior ensures it has no effect on model estimation.
+
+## The `init_ranges` field and `create_initfun()` {#the-init_ranges-field-and-create_initfun}
+
+Models with custom families often require carefully chosen initial values for stable MCMC sampling. The `init_ranges` field in the model definition provides this:
+
+``` r
+init_ranges = list(
+  mu    = c(-0.1, 0.1),
+  drift = c(-1, 1),
+  bound = c(1, 2),
+  ndt   = c(0.01, 0.05)
+)
+```
+
+Each entry maps a parameter name to a `c(lower, upper)` range. The `create_initfun()` S3 generic (defined in `R/helpers-inits.R`) uses these ranges to generate an initialization function that:
+
+1.  Parses the Stan code to determine parameter dimensions and types
+2.  Generates initial values for intercepts within the specified ranges (applying link transformations)
+3.  Generates small random values for regression coefficients, random effect SDs, and correlation matrices
+
+If `init_ranges` is `NULL` (the default), `create_initfun` returns `1`, which tells brms to use its default initialization. Most circular models (mixture2p, mixture3p) do not need custom initialization, but RT models (DDM, EZDM, cswald) and SDM do.
+
+## Version tables
+
+Some models support multiple versions with different parameter sets. Two patterns are used:
+
+**If/else pattern** (older, used by IMM): Version-specific parameters are selected via conditional logic within the model constructor.
+
+**Version table pattern** (newer, used by EZDM and cswald): Version-specific parameters, links, priors, and init_ranges are stored in a lookup table:
+
+``` r
+.ezdm_version_table <- list(
+  "3par" = list(
+    parameters = list(...),
+    links = list(...),
+    fixed_parameters = list(...),
+    priors = list(...),
+    init_ranges = list(...)
+  ),
+  "4par" = list(
+    parameters = list(...),
+    links = list(...),
+    ...
+  )
+)
+```
+
+The model constructor then indexes into this table:
+
+``` r
+parameters = .ezdm_version_table[[version]][["parameters"]],
+links = .ezdm_version_table[[version]][["links"]],
+...
+```
+
+This pattern is cleaner and easier to extend. New models with multiple versions should prefer this approach.
 
 ## File organization
 
@@ -157,28 +293,56 @@ To add new models, you do not have to edit this file. The functions above are ge
 
 ### `R/helpers-*.R` {.unnumbered}
 
-`R/helpers-data.R`, `R/helpers-parameters.R`, `R/helpers-postprocess.R`, `R/helpers-model.R`, and `R/helpers-prior.R`
+`R/helpers-data.R`, `R/helpers-inits.R`, `R/helpers-model.R`, `R/helpers-parameters.R`, `R/helpers-postprocess.R`, and `R/helpers-prior.R`
 
-These files define the main generic S3 methods for checking data, post-processing the fitted model, configuring the model, checking the model formula, and combining priors. They contain the default methods for these functions, which are called by `bmm()` if no specific method is defined for a model. If you want to add a new model, you will need to add specific methods for these functions for your model. *You do not need to edit these files to add a new model.*
+These files define the main generic S3 methods for checking data, creating initial value functions, configuring the model, extracting parameters, post-processing the fitted model, and combining priors. They contain the default methods for these functions, which are called by `bmm()` if no specific method is defined for a model. If you want to add a new model, you will need to add specific methods for these functions for your model. *You do not need to edit these files to add a new model.*
 
 ### `R/bmmformula.R` {.unnumbered}
 
 This file contains the definition of the `bmmformula` class, which is used to represent the formula for the model. It contains the `bmmformula()` function and its alias `bmf()`, which is used to create a new formula object.
 
-In addition, it contains the definition of the `bmf2bf` S3 method that is used to convert a `bmmformula` object into a `brms_formula`\`object. This is necessary, as `brmsformula` objects are required to include the response variable in the first formula line. In contrast `bmmformula` objects only contain formulas predicting the paramaeters of a `bmmmodel`. The `bmf2bf` S3 method is used to perform this conversion and add the first formula line and including the response variable in the `brmsformula` created during model configuration.
+In addition, it contains the definition of the `bmf2bf` S3 method that is used to convert a `bmmformula` object into a `brmsformula` object. This is necessary, as `brmsformula` objects are required to include the response variable in the first formula line. In contrast `bmmformula` objects only contain formulas predicting the parameters of a `bmmodel`. The `bmf2bf` S3 method is used to perform this conversion and add the first formula line including the response variable in the `brmsformula` created during model configuration. Some models override this with custom methods (e.g., `bmf2bf.ddm`, `bmf2bf.ezdm_3par`).
 
 ### `R/model_*.R` {.unnumbered}
 
-Each model and it's methods is defined in a separate file. For example, the 3-parameter mixture model is defined in `model_mixture3p.R`. This file contains the internal function that defines the model and its parameters, and the specific methods for the generic S3 functions. Your new model will exist in a file like this. The name of the file should be `model_name_of_your_model.R`. You don't have to add this file manually - see section [Adding new models](#adding-new-models-to-bmm).
+Each model and its methods are defined in a separate file. The current model files are:
+
+-   `model_mixture2p.R` - Two-parameter mixture model
+-   `model_mixture3p.R` - Three-parameter mixture model
+-   `model_imm.R` - Interference Measurement Model (versions: full, bsc, abc)
+-   `model_sdm.R` - Signal Discrimination Model
+-   `model_ddm.R` - Diffusion Decision Model
+-   `model_ezdm.R` - EZ-Diffusion Model (versions: 3par, 4par)
+-   `model_cswald.R` - Censored-Shifted Wald Model (versions: simple, crisk)
+-   `model_m3.R` - Multinomial Memory Measurement Model (versions: ss, cs, custom)
+
+Each file contains the internal model constructor, the user-facing alias, and model-specific S3 methods. Your new model will exist in a file like this. The name of the file should be `model_name_of_your_model.R`. You don't have to add this file manually - see section [Adding new models](#adding-new-models-to-bmm).
 
 ### `R/distributions.R` {.unnumbered}
 
-This file contains the definition of the custom distributions that are used in the package. It specifies the density, random number generation, and probability functions for the custom distributions. If your model requires a custom distribution, you will need to add it to this file. These are not used during model fitting, but can be used to generate data from the model, and to plot the model fit.
+This file contains the definition of the custom distributions used in the package. It specifies the density (`d*`), random number generation (`r*`), cumulative probability (`p*`), and quantile (`q*`) functions for each model's distribution. Currently implemented distributions include: `sdm`, `mixture2p`, `mixture3p`, `imm`, `m3`, `ddm`, `ezdm`, and `cswald`. If your model requires a custom distribution, you will need to add it to this file. These are not used during model fitting, but are used to generate data from the model and for posterior predictive checks.
+
+### `R/conditional_effects.R`, `R/emmeans.R`, `R/pp_check.R` {.unnumbered}
+
+Post-processing infrastructure for fitted `bmmfit` objects:
+
+-   `conditional_effects.R` - `conditional_effects()` method for visualizing marginal effects
+-   `emmeans.R` - Integration with the `emmeans` package for estimated marginal means
+-   `pp_check.R` - Posterior predictive checking, including custom support for multinomial models
+
+These work automatically for most models and do not need to be edited when adding a new model.
 
 ### `R/utils.R`, `R/brms-misc.R`, `R/restructure.R`, `R/summary.R`, `R/update.R` {.unnumbered}
 
-Various utility functions.
+Various utility functions. Note that `R/brms-misc.R` is a read-only vendored copy from brms and should not be edited.
 
 ### `inst/stan_chunks/` {.unnumbered}
 
-This directory contains the Stan chunks that are passed to the `brms::stanvar()` function. These are used to define the custom distributions that are used in the package. If you add a new custom distribution, you will need to add a new Stan chunk to this directory. Each model has several files, one for each corresponding stanvar block.
+This directory contains the Stan code chunks that are passed to the `brms::stanvar()` function. These define the custom likelihoods and helper functions for models that require custom brms families. Current Stan files:
+
+-   `sdm_simple_funs.stan`, `sdm_simple_tdata.stan`, `sdm_simple_likelihood.stan` - SDM model
+-   `ddm_functions.stan` - DDM model (Wiener process likelihood)
+-   `ezdm_3par_functions.stan`, `ezdm_4par_functions.stan` - EZDM model
+-   `cswald_simple_functions.stan`, `cswald_crisk_functions.stan`, `cswald_helper_functions.stan` - cswald model
+
+If you add a new model with a custom family, you will need to add Stan chunks to this directory. The naming convention is `{model_name}_{block}.stan` (e.g., `my_model_functions.stan`).

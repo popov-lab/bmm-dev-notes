@@ -26,13 +26,13 @@ use_model_template(
 
 #### Arguments {.unnumbered}
 
-| Argument         | Description                                                                                                                                                                                                                                                                                                                                                                                   |
-|----------------------|--------------------------------------------------|
-| `model_name`     | A string with the name of the model. The file will be named bmm_model_model_name.R and all necessary functions will be created with the appropriate names and structure. The file will be saved in the ⁠R/⁠ directory                                                                                                                                                                           |
-| `custom_family`  | Logical; Do you plan to define a brms::custom_family()? If TRUE the function will add a section for the custom family, placeholders for the stan_vars and corresponding empty .stan files in ⁠inst/stan_chunks/⁠, that you can fill For an example, see the sdmSimple model in ⁠/R/bmm_model_sdmSimple.R⁠. If FALSE (default) the function will not add the custom family section nor stan files. |
-| `stanvar_blocks` | A character vector with the names of the blocks that will be added to the custom family section. See brms::stanvar() for more details. The default lists all the possible blocks, but it is unlikely that you will need all of them. You can specify a vector of only those that you need. The function will add a section for each block in the list                                         |
-| `open_files`     | Logical; If TRUE (default), the function will open the template files that were created in RStudio                                                                                                                                                                                                                                                                                            |
-| `testing`        | Logical; If TRUE, the function will return the file content but will not save the file. If FALSE (default), the function will save the file                                                                                                                                                                                                                                                   |
+| Argument | Description |
+|-----------------------|-------------------------------------------------|
+| `model_name` | A string with the name of the model. The file will be named bmm_model_model_name.R and all necessary functions will be created with the appropriate names and structure. The file will be saved in the ⁠R/⁠ directory |
+| `custom_family` | Logical; Do you plan to define a brms::custom_family()? If TRUE the function will add a section for the custom family, placeholders for the stan_vars and corresponding empty .stan files in ⁠inst/stan_chunks/⁠, that you can fill For an example, see the sdmSimple model in ⁠/R/bmm_model_sdmSimple.R⁠. If FALSE (default) the function will not add the custom family section nor stan files. |
+| `stanvar_blocks` | A character vector with the names of the blocks that will be added to the custom family section. See brms::stanvar() for more details. The default lists all the possible blocks, but it is unlikely that you will need all of them. You can specify a vector of only those that you need. The function will add a section for each block in the list |
+| `open_files` | Logical; If TRUE (default), the function will open the template files that were created in RStudio |
+| `testing` | Logical; If TRUE, the function will return the file content but will not save the file. If FALSE (default), the function will save the file |
 
 ## Example
 
@@ -75,6 +75,7 @@ Now you can fill the files with the appropriate code. The Stan files will be emp
        links = list(),
        fixed_parameters = list(),
        default_priors = list(par1 = list(), par2 = list()),
+       init_ranges = NULL,
        void_mu = FALSE
      ),
      class = c('bmmodel', 'gcm'),
@@ -216,57 +217,79 @@ postprocess_brm.gcm <- function(model, fit) {
 
 Now you have to:
 
-1.  Fill the `.model_gcm` function with the appropriate code. This function should return a list with all the variables specified above. The class of the list should be `c('bmmmodel', 'gcm')`. Rename the response arguments and the other required arguments, or delete the other arguments if you do not have any. You can see an example in the `model_sdm.R` file. Specify the parameters of the model, the link functions, what if any parameters are fixed (and to what value). It's crucial that you set default priors for every parameter of the model, which should be informed by knowledge in the field.
+1.  **Fill the `.model_gcm` function** with the appropriate code. This function should return a list with all the variables specified above. The class of the list should be `c('bmmodel', 'gcm')`. Rename the response arguments and the other required arguments, or delete the other arguments if you do not have any. You can see an example in the `model_sdm.R` file. Specify the parameters of the model, the link functions, what if any parameters are fixed (and to what value). It's crucial that you set default priors for every parameter of the model, which should be informed by knowledge in the field.
 
-2.  Adjust the user-facing alias. Here you should only rename the required arguments and fill in the `@examples` section with a full example. Everything else will be filled in automatically based on the information in the `.model_gcm` function.
+    If your model has multiple versions with different parameter sets, consider using the **version table pattern** (see [Section @sec-example-model] for the EZDM example) rather than if/else logic.
 
-3.  Fill the `check_data.gcm` function with the appropriate code. This function should check the data and return the data. You may or may not need to compute any transformations or save some variables as attributes of the data.
+2.  **Adjust the user-facing alias.** Here you should only rename the required arguments and fill in the `@examples` section with a full example. Everything else will be filled in automatically based on the information in the `.model_gcm` function.
 
-4.  If necessary define the `bmf2bf.gcm` method to convert the `bmmformula` to a `brmsformula`. The first step for this is always to specify the response variable and additional response information. Keep in mind that `brms` automatically interprets this formula as the linear model formula for the `mu` parameter of your custom family. Currently, `brms` requires all custom families to have a `mu` parameter. However, we recommend to code this parameter as a `void_mu`, and fix the intercept of this parameter to zero using constant priors. This way, the `bmmformula` can be used to only specify the linear or non-linear model for the parameters of a `bmmmodel`. *If your model has a single response variable, you can delete this section.*
+3.  **Fill the `check_data.gcm` function** with the appropriate code. This function should check the data and return the data. You may or may not need to compute any transformations or save some variables as attributes of the data.
 
-5.  Fill the `configure_model.gcm` function with the appropriate code. This function should construct the formula, the family, the stanvars. You can also retrieve any arguments you saved from the data check. Depending on your model, some of these parts might not be necessary. For example, for the mixture models (e.g. `mixture3p`), we construct a new formula, because we want to rename the arguments to make it easier for the user. For the `sdmSimple` model, we define the family ourselves, so we don't need to change the formula.
+4.  **If necessary, define the `bmf2bf.gcm` method** to convert the `bmmformula` to a `brmsformula`. You need a custom `bmf2bf` method if:
 
-    You need to fill information about your custom family, and then fill the STAN files with your STAN code. Conveniently, you don't have to edit lines 134-140: loading the STAN files and setting up the stanvars is set up automatically when calling the `use_model_template` function. Should you need to add more STAN files after you created the template, you can add the files in `init/stan_chunks/` manually and edit those lines to additionally load the manually added files.
+    -   Your model has **multiple response variables** (e.g., DDM needs `rt | dec(response) ~ 1`)
+    -   Your model uses **aggregate data** with `vreal()`, `vint()`, `trials()` (e.g., EZDM)
+    -   Your model needs special response wrapping
 
-6.  Fill the `postprocess_brm.gcm` function with the appropriate code. By post-processing, we mean changes to the fitted brms model - like renaming parameters, etc. If you don't need any post-processing, you can delete this section.
+    Keep in mind that `brms` automatically interprets this formula as the linear model formula for the `mu` parameter of your custom family. If your model does not have a natural `mu` parameter, set `void_mu = TRUE` in your model definition and include `mu = 0` in `fixed_parameters`. See the DDM example in [Section @sec-example-model] for details on this pattern. *If your model has a single response variable and no special wrapping, you can delete this section.*
+
+5.  **Fill the `configure_model.gcm` function** with the appropriate code. This function should construct the formula, the family, and the stanvars, and return them as `nlist(formula, data, stanvars)`. Note that `configure_model` does **not** return initial values — initialization is handled separately by `create_initfun()` using the `init_ranges` field in your model definition.
+
+    You need to fill information about your custom family, and then fill the STAN files with your STAN code. Conveniently, loading the STAN files and setting up the stanvars is set up automatically when calling the `use_model_template` function. Should you need to add more STAN files after you created the template, you can add the files in `inst/stan_chunks/` manually and edit those lines to additionally load the manually added files.
+
+6.  **Define `init_ranges` if needed.** If your model uses a custom family (especially RT models), you should define `init_ranges` in your model definition to provide plausible starting ranges for MCMC sampling. The `create_initfun()` step will automatically use these to generate an initialization function. Each entry maps a parameter name to a `c(lower, upper)` range. If `init_ranges` is `NULL`, brms' default initialization is used.
+
+7.  **Fill the `postprocess_brm.gcm` function** with the appropriate code. By post-processing, we mean changes to the fitted brms model - like renaming parameters, etc. If you don't need any post-processing, you can delete this section.
+
+8.  **Define `log_lik` and `posterior_predict` functions** if your model uses a custom family. These R functions must be passed to `brms::custom_family()` and enable posterior predictive checks, model comparison (via LOO/WAIC), and `posterior_predict()`. They should use the `d*()` and `r*()` distribution functions from `R/distributions.R`. See the DDM example in [Section @sec-example-model].
 
 ## Testing
 
-Unit testing is extremely important. You should test your model with the `testthat` package. You can use the `use_test()` function to create a test file for your model. See file `tests/testthat/test-bmm.R` for an example of how we test the existing models. BRMS models take a long time to fit, so we don't test the actual fitting process. The `bmm()` function provides an argument `backend="mock"`, which will return a mock object instead of fitting the model. This ensures that the entire pipeline works without errors. For example, here's a test of the `IMMfull` model:
+Unit testing is extremely important. You should test your model with the `testthat` package. You can use the `use_test()` function to create a test file for your model. See files like `tests/testthat/test-model_ddm.R` or `tests/testthat/test-model_cswald.R` for examples of how we test models. BRMS models take a long time to fit, so we don't test the actual fitting process. The `bmm()` function provides an argument `backend="mock"`, which will return a mock object instead of fitting the model. This ensures that the entire pipeline works without errors. For example, here's a mock test pattern:
 
 ``` r
-test_that('Available mock models run without errors',{
-  withr::local_options('bmm.silent'=2)
+test_that("gcm model runs without errors", {
+  withr::local_options("bmm.silent" = 2)
   skip_on_cran()
+
   dat <- data.frame(
-    resp_err = rIMM(n = 5),
-    Item2_rel = 2,
-    Item3_rel = -1.5,
-    spaD2 = 0.5,
-    spaD3 = 2
+    resp = rnorm(10),
+    condition = rep(c("A", "B"), 5)
   )
 
-  # two-parameter model mock fit
-  f <- bmmformula(kappa ~ 1, c ~ 1, a ~ 1, s ~ 1)
-  mock_fit <- bmm(f, dat, 
-                  imm(resp_err = "resp_err", 
-                      setsize = 3, 
-                      nt_features = paste0('Item',2:3,'_rel'), 
-                      nt_distance=paste0('spaD',2:3)), 
-                  backend = "mock", mock_fit = 1, rename=FALSE)
+  f <- bmmformula(param1 ~ 1, param2 ~ 1)
+  mock_fit <- bmm(
+    f, dat,
+    gcm(resp_var1 = "resp"),
+    backend = "mock", mock_fit = 1, rename = FALSE
+  )
   expect_equal(mock_fit$fit, 1)
-  expect_type(mock_fit$bmm$fit_args, "list")
-  expect_equal(names(mock_fit$fit_args[1:4]), c("formula", "data"))
 })
 ```
 
 The tests based on the `testthat` package are run every time you call the `check()` command. Before you submit your changes, make sure that all tests pass.
 
-::: callout-important
-Additionally, you should perform a full test of the model by running it in a separate script and ensuring it gives meaningful results. At the very least, you should perform basic parameter recovery simulations for hyper-parameters (i.e. means and standard deviations) as well as subject-level parameters to give users an idea of how much data they need to adequately estimate the model.
+### Parameter recovery
 
-We are in the process of establishing guidelines for that.
-:::
+Additionally, you should perform a full test of the model by running it in a separate script and ensuring it gives meaningful results. Create a parameter recovery script at `local/<model_name>_parameter_recovery.R`. At the very least, you should perform basic parameter recovery simulations for hyper-parameters (i.e., means and standard deviations) as well as subject-level parameters to give users an idea of how much data they need to adequately estimate the model.
+
+### Distribution functions
+
+If your model uses a custom family, you should also add distribution functions (`d*`, `r*`, and optionally `p*`, `q*`) to `R/distributions.R`. These are used for:
+
+-   Data simulation (useful for parameter recovery and examples)
+-   Posterior predictive checks via the `log_lik` and `posterior_predict` functions
+-   Plotting model fits
+
+## Post-processing infrastructure
+
+The bmm package provides several post-processing tools that work automatically for most models:
+
+-   **`conditional_effects()`** — visualize marginal effects of predictors on model parameters. Works automatically via the bmmfit class.
+-   **`emmeans` integration** — estimated marginal means via the emmeans package. Works automatically.
+-   **`pp_check()`** — posterior predictive checks. Works automatically for standard families; custom support exists for multinomial families (like M3).
+
+For these to work with your custom family, you need to have defined `log_lik` and `posterior_predict` functions and passed them to `brms::custom_family()`. No additional code is typically needed in your model file.
 
 ## Add an example dataset
 

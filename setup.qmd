@@ -10,6 +10,15 @@
 
 3.  [Create a new branch](https://github.com/Kunena/Kunena-Forum/wiki/Create-a-new-branch-with-git-and-manage-branches) for your model, typically named `feature/name-of-my-model`
 
+## Prerequisites
+
+The bmm package requires **R \>= 4.1.0** (for native pipe `|>` support). The package works with both `rstan` and `cmdstanr` backends. `cmdstanr` is generally recommended for faster compilation and better error messages. You can install it with:
+
+``` r
+install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOption("repos")))
+cmdstanr::install_cmdstan()
+```
+
 ## Package development via RStudio and devtools
 
 The bmm package is setup as an RStudio project. Opening the `bmm.Rproj` file will open a new RStudio instance, which facilitates package development with a few commands from the `devtools` package. A great tutorial on package development can be found [here](https://r-pkgs.org/). Below is a summary of the most important steps
@@ -60,4 +69,6 @@ The bmm package is setup as an RStudio project. Opening the `bmm.Rproj` file wil
     document()
     ```
 
-    </details>
+## The `local/` directory
+
+The `local/` directory in the bmm repository is used for machine-specific scripts that are not tracked by git. When developing a new model, you should create a parameter recovery script at `local/<model_name>_parameter_recovery.R`. This script should simulate data from the model, fit it, and verify that parameters are recovered accurately. These scripts are not run by `R CMD check` but are expected for all new models.

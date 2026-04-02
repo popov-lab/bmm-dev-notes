@@ -360,28 +360,28 @@ The SDM model is defined in the file `R/model_sdm.R`. The SDM model differs in t
     list(
       resp_vars = nlist(resp_error),
       other_vars = nlist(),
-      domain = 'Visual working memory',
-      task = 'Continuous reproduction',
-      name = 'Signal Discrimination Model (SDM) by Oberauer (2023)',
+      domain = "Visual working memory",
+      task = "Continuous reproduction",
+      name = "Signal Discrimination Model (SDM) by Oberauer (2023)",
       citation = glue(
-        'Oberauer, K. (2023). Measurement models for visual working memory - \\
-        A factorial model comparison. Psychological Review, 130(3), 841-852'
+        "Oberauer, K. (2023). Measurement models for visual working memory - \\
+        A factorial model comparison. Psychological Review, 130(3), 841-852"
       ),
       version = version,
       requirements = glue(
-        '- The response variable should be in radians and represent the angular \\
-        error relative to the target'
+        "- The response variable should be in radians and represent the angular \\
+        error relative to the target"
       ),
       parameters = list(
-        mu = glue('Location parameter of the SDM distribution (in radians; \\
-                  by default fixed internally to 0)'),
-        c = 'Memory strength parameter of the SDM distribution',
-        kappa = 'Precision parameter of the SDM distribution'
+        mu = glue("Location parameter of the SDM distribution (in radians; \\
+                  by default fixed internally to 0)"),
+        c = "Memory strength parameter of the SDM distribution",
+        kappa = "Precision parameter of the SDM distribution"
       ),
       links = list(
-        mu = 'tan_half',
-        c = 'log',
-        kappa = 'log'
+        mu = "tan_half",
+        c = "log",
+        kappa = "log"
       ),
       fixed_parameters = list(mu = 0),
       default_priors = list(
@@ -389,15 +389,22 @@ The SDM model is defined in the file `R/model_sdm.R`. The SDM model differs in t
         kappa = list(main = "student_t(5, 1.75, 0.75)", effects = "normal(0, 1)"),
         c = list(main = "student_t(5, 2, 0.75)", effects = "normal(0, 1)")
       ),
+      init_ranges = list(
+        mu = c(-0.5, 0.5),
+        kappa = c(2.5, 3.5),
+        c = c(4, 6)
+      ),
       void_mu = FALSE
     ),
-    class = c('bmmodel', 'circular', 'sdm', paste0("sdm_", version)),
+    class = c("bmmodel", "circular", "sdm", paste0("sdm_", version)),
     call = call
   )
   out$links[names(links)] <- links
   out
 }
 ```
+
+Note that compared to the earlier IMM example, the SDM model now includes `init_ranges`. This provides initial value ranges for MCMC sampling, which the `create_initfun()` step uses to generate appropriate starting values. The SDM model benefits from custom initialization because its custom Stan likelihood can be sensitive to extreme starting values.
 
 The model definition is similar to the IMM model, but the SDM model only requires the user to specify the response error, but not additional variables such as non-target variables. The `class` is also different, as the SDM model is not a subclass of the IMM model. We'll skip the alias for the SDM model, as it is similar for every model.
 
@@ -447,18 +454,16 @@ configure_model.sdm <- function(model, data, formula) {
   formula <- bmf2bf(model, formula)
   formula$family <- sdm_simple
 
-  # set initial values to be sampled between [-1,1] to avoid extreme SDs that
-  # can cause the sampler to fail
-  init <- 1
-
   # return the list
-  nlist(formula, data, stanvars, init)
+  nlist(formula, data, stanvars)
 }
 ```
 
+Note that `configure_model` no longer returns `init` — initial values are now handled separately by `create_initfun()`, which uses the `init_ranges` defined in the model object.
+
 **Lines 5-14** use the `brms::custom_family` function to define a custom family for the SDM model. The `dpars` argument specifies the parameters of the model, and the `links` argument specifies the link functions for the parameters. For more information, see [here](https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html)
 
-**Lines 17-23** read the custom STAN code from the `inst/stan_chunks` directory. This has to be specified with the system.file() command to ensure that the code is found when the package is installed. The `stanvars` object is used to pass custom STAN code to the `brms` package. The `stanvars` object is a list of `brms::stanvar` objects, each of which contains the STAN code for a specific part of the model. There is a separate `.stan` file for each part of the STAN code, and each file is read into a separate `brms::stanvar` object.
+**Lines 17-23** read the custom STAN code from the `inst/stan_chunks` directory. This has to be specified with the `system.file()` command to ensure that the code is found when the package is installed. The `stanvars` object is used to pass custom STAN code to the `brms` package. The `stanvars` object is a list of `brms::stanvar` objects, each of which contains the STAN code for a specific part of the model. There is a separate `.stan` file for each part of the STAN code, and each file is read into a separate `brms::stanvar` object.
 
 Converting the `bmmformula` to a `brmsformula` and collecting all arguments is done entirely using the `bmf2bf` method.
 
@@ -501,5 +506,319 @@ posterior_predict_sdm_simple <- function(i, prep, ...) {
   rsdm(length(mu), mu, c, kappa)
 }
 ```
+
+## The Diffusion Decision Model (DDM)
+
+The DDM model is defined in `R/model_ddm.R`.
+
+### Model definition
+
+It demonstrates several patterns that differ from the circular models above: the `void_mu` pattern, `init_ranges` for MCMC initialization, and a custom `bmf2bf` method for response variable wrapping.
+
+The DDM uses a defaults table to store parameters, links, priors, and init_ranges in one place:
+
+``` r
+.ddm_defaults <- list(
+  parameters = list(
+    drift = "Drift rate = Average rate of evidence accumulation of the decision processes",
+    bound = "Boundary separation = Distance between the decision boundaries that need to be reached",
+    ndt   = "Non-decision time = Additional time required beyond the evidence accumulation process",
+    zr    = "Relative starting point = Starting point between the decision thresholds relative to the upper bound."
+  ),
+  links = list(
+    drift = "identity", bound = "log", ndt = "log", zr = "logit"
+  ),
+  fixed_parameters = list(
+    zr = 0,
+    mu = 0
+  ),
+  priors = list(
+    drift = list(main = "cauchy(0,1)", effects = "normal(0,0.5)"),
+    bound = list(main = "normal(0,0.5)", effects = "normal(0,0.5)"),
+    ndt   = list(main = "normal(-1.5,0.5)", effects = "normal(0,0.3)"),
+    zr    = list(main = "normal(0,0.5)", effects = "normal(0,0.3)")
+  ),
+  init_ranges = list(
+    mu = c(-0.1, 0.1),
+    drift  = c(-1, 1),
+    bound  = c(1, 2),
+    ndt    = c(0.01, 0.05),
+    zr     = c(0.45, 0.55)
+  )
+)
+
+.model_ddm <- function(rt = NULL, response = NULL, links = NULL, call = NULL, ...) {
+  out <- structure(
+    list(
+      resp_vars = nlist(rt, response),
+      other_vars = nlist(),
+      domain = "Decision Making / Response times",
+      task = "Two-Alternative Force Choice RT",
+      name = "Diffusion Decision Model",
+      version = "NA",
+      citation = glue(
+        "Ratcliff, R. (1978). A theory of memory retrieval. Psychological Review, 85(2), 59-108."
+      ),
+      requirements = glue(
+        "- The response time should be in seconds and \\
+          represent the time between onset of the target stimulus until the response execution
+          - The response should be coded numerically: \\
+          0 = lower response, 1 = upper response"
+      ),
+      parameters = .ddm_defaults[["parameters"]],
+      links = .ddm_defaults[["links"]],
+      fixed_parameters = .ddm_defaults[["fixed_parameters"]],
+      default_priors = .ddm_defaults[["priors"]],
+      init_ranges = .ddm_defaults[["init_ranges"]],
+      void_mu = TRUE
+    ),
+    class = c("bmmodel", "ddm"),
+    call = call
+  )
+  out$links[names(links)] <- links
+  out
+}
+```
+
+Key differences from the circular models:
+
+-   **`void_mu = TRUE`**: The DDM has no natural location parameter. A dummy `mu` is included and fixed to 0 (see `fixed_parameters`). This satisfies brms' requirement that every custom family has a `mu` parameter.
+-   **Two response variables**: `resp_vars = nlist(rt, response)` — reaction time and binary choice. This requires a custom `bmf2bf` method.
+-   **`init_ranges`**: Specifies plausible starting ranges for each parameter to ensure stable MCMC sampling. The `create_initfun()` step uses these.
+-   **Short class chain**: `c("bmmodel", "ddm")` — no intermediate domain class. RT models don't share as many check_data patterns as the circular models do.
+
+### User-facing alias
+
+The DDM alias follows the standard pattern — calling `stop_missing_args()` and then the internal constructor:
+
+``` r
+ddm <- function(rt, response, links = NULL, ...) {
+  call <- match.call()
+  stop_missing_args()
+  .model_ddm(rt = rt, response = response, links = links, call = call, ...)
+}
+```
+
+### bmf2bf method
+
+Because the DDM has two response variables (rt and response), it needs a custom `bmf2bf` method to construct the first line of the brms formula with the proper response wrapping:
+
+``` r
+#' @export
+bmf2bf.ddm <- function(model, formula) {
+  rt <- model$resp_vars$rt
+  response <- model$resp_vars$response
+  brms::bf(paste0(rt, " | dec(", response, ") ~ 1"))
+}
+```
+
+This creates a formula like `rt | dec(response) ~ 1`, where `dec()` tells brms which variable codes the binary decision (0 = lower, 1 = upper boundary).
+
+### configure_model method
+
+``` r
+#' @export
+configure_model.ddm <- function(model, data, formula) {
+  formula <- bmf2bf(model, formula)
+
+  ddm_family <- function(link_drift, link_bound, link_ndt, link_zr) {
+    brms::custom_family(
+      "ddm",
+      dpars = c("mu", "drift", "bound", "ndt", "zr"),
+      links = c("identity", link_drift, link_bound, link_ndt, link_zr),
+      lb = c(NA, NA, 0.1, 0, 0),
+      ub = c(NA, NA, NA, NA, 1),
+      type = "real",
+      vars = "dec[n]",
+      loop = TRUE,
+      log_lik = log_lik_ddm,
+      posterior_predict = posterior_predict_ddm
+    )
+  }
+
+  formula$family <- ddm_family(
+    link_drift = model$links$drift,
+    link_bound = model$links$bound,
+    link_ndt = model$links$ndt,
+    link_zr = model$links$zr
+  )
+
+  sc_path <- system.file("stan_chunks", package = "bmm")
+  stan_functions <- read_lines2(paste0(sc_path, "/ddm_functions.stan"))
+  stanvars <- brms::stanvar(scode = stan_functions, block = "functions")
+
+  nlist(formula, data, stanvars)
+}
+```
+
+Note that:
+
+-   `mu` is included in `dpars` with an `identity` link (the void_mu pattern)
+-   `vars = "dec[n]"` passes the decision variable to the Stan likelihood
+-   The `log_lik` and `posterior_predict` functions use the `dddm()` and `rddm()` distribution functions from `R/distributions.R`
+-   `configure_model` returns `nlist(formula, data, stanvars)` without `init` — initialization is handled by `create_initfun()`
+
+### check_data method
+
+The DDM has thorough data validation for RT and response variables:
+
+``` r
+#' @export
+check_data.ddm <- function(model, data, formula) {
+  rt_var <- model$resp_vars$rt
+  response_var <- model$resp_vars$response
+
+  # check variables exist
+  stopif(not_in(rt_var, colnames(data)),
+         "The RT variable '{rt_var}' is not present in the data.")
+  stopif(not_in(response_var, colnames(data)),
+         "The response variable '{response_var}' is not present in the data.")
+
+  # remove NAs with warning
+  if (any(is.na(data[, rt_var]))) {
+    data <- data[!is.na(data[, rt_var]), ]
+    warning2("Some values in {rt_var} were NA. These were removed.")
+  }
+
+  # validate RT: must be positive, in seconds (warn if > 10s or < 0.1s)
+  stopif(any(data[, rt_var] < 0, na.rm = TRUE),
+         "Some reaction times are lower than zero.")
+  warnif(any(data[, rt_var] > 10, na.rm = TRUE),
+         "Your data contains reaction times larger than 10 seconds...")
+
+  # validate response: accepts integer (0/1), logical, or character ("upper"/"lower")
+  # coerces all formats to 0/1 integer
+  # ... (full validation with type coercion)
+
+  NextMethod("check_data")
+}
+```
+
+The DDM's `check_data` is a good example of thorough validation: it checks variable existence, removes NAs with warnings, validates RT ranges, and flexibly accepts multiple response coding formats (integer, logical, character) while coercing them all to 0/1.
+
+## The EZ-Diffusion Model (EZDM)
+
+The EZDM model (`R/model_ezdm.R`) demonstrates two additional patterns: the **version table** pattern for managing multiple model versions, and working with **aggregate-level data** (summary statistics rather than trial-level observations).
+
+### Version table
+
+Instead of using if/else logic to handle version-specific parameters (as the IMM does), the EZDM uses a lookup table:
+
+``` r
+.ezdm_version_table <- list(
+  "3par" = list(
+    parameters = list(
+      drift = "Drift rate = ...",
+      bound = "Boundary separation = ...",
+      ndt = "Non-decision time = ...",
+      s = "The diffusion constant = ..."
+    ),
+    links = list(drift = "identity", bound = "log", ndt = "log", s = "log"),
+    fixed_parameters = list(s = 0, mu = 0),
+    priors = list(
+      drift = list(main = "cauchy(0,1)", effects = "normal(0,0.5)"),
+      bound = list(main = "normal(0,0.5)", effects = "normal(0,0.5)"),
+      ndt = list(main = "normal(-1.5,0.5)", effects = "normal(0,0.3)"),
+      s = list(main = "normal(0,1)", effects = "normal(0,0.3)")
+    ),
+    init_ranges = list(
+      mu = c(0, 1), drift = c(-1, 1), bound = c(1, 2),
+      ndt = c(0.25, 0.5), s = c(0.99, 1.01)
+    )
+  ),
+  "4par" = list(
+    parameters = list(...),  # adds zr parameter
+    links = list(...),       # adds zr = "logit"
+    ...
+  )
+)
+```
+
+The model constructor then indexes into this table:
+
+``` r
+.model_ezdm <- function(mean_rt = NULL, var_rt = NULL, n_upper = NULL,
+                         n_trials = NULL, version = "3par", links = NULL,
+                         call = NULL, ...) {
+  out <- structure(
+    list(
+      resp_vars = nlist(mean_rt, var_rt, n_upper),
+      other_vars = nlist(n_trials),
+      ...
+      parameters = .ezdm_version_table[[version]][["parameters"]],
+      links = .ezdm_version_table[[version]][["links"]],
+      fixed_parameters = .ezdm_version_table[[version]][["fixed_parameters"]],
+      default_priors = .ezdm_version_table[[version]][["priors"]],
+      init_ranges = .ezdm_version_table[[version]][["init_ranges"]],
+      void_mu = TRUE
+    ),
+    class = c("bmmodel", "ezdm"),
+    call = call
+  )
+  if (!is.null(version)) class(out) <- c(class(out), paste0("ezdm_", version))
+  ...
+}
+```
+
+This pattern is cleaner and easier to extend than conditional logic. New models with multiple versions should prefer this approach.
+
+### bmf2bf for aggregate data
+
+The EZDM operates on aggregate statistics (mean RT, variance of RT, number of upper responses, total trials) rather than trial-level data. This requires version-specific `bmf2bf` methods that pack multiple response variables into brms' special response terms:
+
+``` r
+#' @export
+bmf2bf.ezdm_3par <- function(model, formula) {
+  mean_rt <- model$resp_vars$mean_rt
+  var_rt <- model$resp_vars$var_rt
+  n_upper <- model$resp_vars$n_upper
+  n_trials <- model$other_vars$n_trials
+
+  brms::bf(paste0(mean_rt, " | vreal(", var_rt, ") + vint(", n_upper,
+                  ") + trials(", n_trials, ") ~ 1"))
+}
+```
+
+This creates a formula like `mean_rt | vreal(var_rt) + vint(n_upper) + trials(n_trials) ~ 1`, where:
+
+-   `vreal()` passes real-valued additional response information to Stan
+-   `vint()` passes integer-valued additional response information
+-   `trials()` passes the trial count
+
+These special brms terms make the additional variables available in the Stan likelihood via `vreal1[n]`, `vint1[n]`, and `trials[n]`.
+
+### Version-specific configure_model
+
+Each EZDM version has its own `configure_model` method because the Stan likelihood functions differ:
+
+``` r
+#' @export
+configure_model.ezdm_3par <- function(model, data, formula) {
+  formula <- bmf2bf(model, formula)
+  links <- model$links
+
+  formula$family <- brms::custom_family(
+    "ezdm_3par",
+    dpars = c("mu", "drift", "bound", "ndt", "s"),
+    links = c("identity", links$drift, links$bound, links$ndt, links$s),
+    lb = c(NA, NA, 0, 0, 0),
+    type = "real",
+    log_lik = log_lik_ezdm_3par,
+    posterior_predict = posterior_predict_ezdm_3par,
+    loop = TRUE,
+    vars = c("vreal1[n]", "vint1[n]", "trials[n]")
+  )
+
+  sc_path <- system.file("stan_chunks", package = "bmm")
+  stan_functions <- read_lines2(paste0(sc_path, "/ezdm_3par_functions.stan"))
+  stanvars <- brms::stanvar(scode = stan_functions, block = "functions")
+
+  nlist(formula, data, stanvars)
+}
+```
+
+Note the `vars` argument in `custom_family` — it lists the additional response terms that the Stan likelihood needs access to.
+
+------------------------------------------------------------------------
 
 We will now look at how to construct all these parts for a new model. **Hint**: you don't have to do it manually, you can use the `use_model_template()` function to generate templates for your model.

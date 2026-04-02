@@ -8,10 +8,10 @@ After your fork the `bmm` repository and create a branch for your new model/feat
 
 [Add](https://www.atlassian.com/git/tutorials/saving-changes) your changes to git, [commit](https://www.atlassian.com/git/tutorials/saving-changes/git-commit) them and then [push](https://www.atlassian.com/git/tutorials/syncing/git-push) your changes to your forked repository. You can run these commands from a terminal or from the RStudio terminal (with the project working directory)
 
-Add all changed files to the staging area:
+Add changed files to the staging area. It is best to add specific files rather than using `git add *` or `git add .`, which can accidentally stage unintended files (e.g., `.env`, large data files, or files in `local/`):
 
 ``` bash
-git add *  
+git add R/model_my_model.R inst/stan_chunks/my_model_funs.stan
 ```
 
 Commit the changes to the local repository
