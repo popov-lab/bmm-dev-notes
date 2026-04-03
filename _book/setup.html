@@ -255,7 +255,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="prerequisites" class="level2" data-number="1.2">
 <h2 data-number="1.2" class="anchored" data-anchor-id="prerequisites"><span class="header-section-number">1.2</span> Prerequisites</h2>
-<p>The bmm package requires <strong>R &gt;= 4.1.0</strong> (for native pipe <code>|&gt;</code> support). Some models (e.g., DDM) require <code>cmdstanr</code> as a backend instead of <code>rstan</code>. Make sure you have <code>cmdstanr</code> installed and configured:</p>
+<p>The bmm package requires <strong>R &gt;= 4.1.0</strong> (for native pipe <code>|&gt;</code> support). The package works with both <code>rstan</code> and <code>cmdstanr</code> backends. <code>cmdstanr</code> is generally recommended for faster compilation and better error messages. You can install it with:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="fu">install.packages</span>(<span class="st">"cmdstanr"</span>, <span class="at">repos =</span> <span class="fu">c</span>(<span class="st">"https://stan-dev.r-universe.dev"</span>, <span class="fu">getOption</span>(<span class="st">"repos"</span>)))</span>
 <span id="cb1-2"><a href="#cb1-2"></a>cmdstanr<span class="sc">::</span><span class="fu">install_cmdstan</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>

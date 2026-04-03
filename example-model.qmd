@@ -267,7 +267,17 @@ check_data.imm_full <- function(model, data, formula) {
 
 The IMM models share methods with the `mixture3p` model, all of which are of class `non_targets` so the `check_data.non_targets` method is defined in the general file `R/helpers-data.R`. If you are adding a new model, you should check if the data requirements are similar to any existing model and define the `check_data` method only for the methods that are unique to your model.
 
-The `check_data.mymodel()` function should always take the arguments `model`, `data`, and `formula` and return the data with the necessary transformations. It should also call `data = NextMethod("check_data")` to call the check_data method of the more general class.
+The `check_data.mymodel()` function should always take the arguments `model`, `data`, and `formula` and return the data with the necessary transformations. It should also call `NextMethod("check_data")` to call the check_data method of the more general class.
+
+To understand what validation your model inherits, trace the `NextMethod` dispatch chain for your class. For example, the `imm_full` model with class `c("bmmodel", "circular", "non_targets", "imm", "imm_full")` dispatches as:
+
+1.  `check_data.imm_full` — validates `nt_distances` (model-specific)
+2.  → `NextMethod` → `check_data.imm` — (if defined, otherwise skipped)
+3.  → `NextMethod` → `check_data.non_targets` — validates `nt_features`, `set_size`, creates index variables, stores data attributes
+4.  → `NextMethod` → `check_data.circular` — validates response is in radians, wraps to $(-\pi, \pi]$
+5.  → `NextMethod` → `check_data.bmmodel` — generic checks (column existence for `resp_vars` and `other_vars`)
+
+This means a new circular model with non-targets automatically gets radian validation, non-target checks, and column existence checks — you only need to write methods for your model-specific validations.
 
 ### configure_model() methods
 
@@ -488,7 +498,9 @@ revert_postprocess_brm.sdm <- function(model, fit, ...) {
 }
 ```
 
-we also have a couple of special functions for custom families in brms (see the `log_lik`and `posterior_predict` argument in the call to `brms::custom_familiy()`), which allow other typical tools from `brms` such posterior_predict of bridgesampling to work:
+The `revert_postprocess_brm` method is the inverse of `postprocess_brm`. It is called internally when functions like `conditional_effects()` or `emmeans()` need to temporarily undo post-processing to work with the model in its original brms representation. If your `postprocess_brm` method modifies the fitted object (e.g., changing link functions, renaming parameters), you should also define a `revert_postprocess_brm` method that reverses those changes.
+
+We also have a couple of special functions for custom families in brms (see the `log_lik`and `posterior_predict` argument in the call to `brms::custom_familiy()`), which allow other typical tools from `brms` such posterior_predict of bridgesampling to work:
 
 ``` r
 log_lik_sdm_simple <- function(i, prep) {

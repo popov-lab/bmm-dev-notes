@@ -77,6 +77,32 @@ It calls several subroutines, implemented as generic S3 methods, to:
 
 In addition, it also tests if the specified `bmmodel` has already been estimated and saved to a `file`. This is done via the `try_read_bmmfit` and `try_save_bmmfit` functions.
 
+## The `bmmformula` class
+
+Before understanding models, it's important to understand how users specify what to estimate. The `bmmformula` (alias: `bmf()`) is a list of formulas, one per model parameter. Unlike `brmsformula`, there is no response variable on the left-hand side — the response is specified when constructing the model object.
+
+``` r
+# Each formula predicts one model parameter
+f <- bmmformula(
+  kappa ~ 0 + set_size + (1 | id),
+  c ~ 1 + (1 | id),
+  a ~ 1
+)
+
+# Equivalent shorthand
+f <- bmf(kappa ~ 0 + set_size + (1 | id), c ~ 1 + (1 | id), a ~ 1)
+```
+
+Parameters can be **fixed to a constant** using `=` instead of `~`:
+
+``` r
+f <- bmf(kappa ~ condition, a = 0.5)  # 'a' is fixed to 0.5, not estimated
+```
+
+Parameters **not mentioned** in the formula are automatically given an intercept-only formula (`param ~ 1`) and a message is printed.
+
+The `bmmformula` is converted to a `brmsformula` during model configuration via the `bmf2bf()` S3 method. This conversion adds the response variable as the first formula line and translates each parameter formula into either `brms::lf()` (linear) or `brms::nlf()` (non-linear) components.
+
 ## Models
 
 All models in the package are defined as S3 classes and follow a strict template. This allows us to implement general methods for handling model fitting, data checking, and post-processing. Each model has an internal function that defines the model and its parameters, and a user-facing alias. For a complete example model file and an explanation, see [Section @sec-example-model]. The general model template looks like this:
@@ -213,6 +239,56 @@ The key S3 generics in the pipeline are:
 | `bmf2bf` | `(model, formula)` | `bmmformula.R` |
 
 The `bmf2bf` generic converts a `bmmformula` to a `brmsformula`. Most models use the default `bmf2bf.bmmodel` method, but some models require custom methods to handle response variable wrapping (e.g., `bmf2bf.ddm` wraps the response as `rt | dec(response) ~ 1`) or multiple response variables (e.g., `bmf2bf.ezdm_3par` packs variables via `vreal()`, `vint()`, `trials()`). Currently, model-specific `bmf2bf` methods exist for: `ddm`, `cswald`, `ezdm_3par`, `ezdm_4par`, and `m3`.
+
+The `configure_model` method must return a named list via `nlist()`. The required and optional fields are:
+
+-   **`formula`** (required) — the `brmsformula` object, with `formula$family` set to the appropriate family
+-   **`data`** (required) — the data frame (possibly with additional columns added during configuration)
+-   **`stanvars`** (optional) — custom Stan code, needed only for models with `brms::custom_family()`. Models using built-in brms families (e.g., `brms::mixture()` for the IMM) do not need stanvars.
+
+Initial values are **not** returned by `configure_model` — they are handled by `create_initfun()` in a separate pipeline step.
+
+## Data flow: the attribute bridge pattern
+
+A key architectural pattern is how information flows between `check_data()` and `configure_model()`. Since these are separate S3 methods, they cannot share local variables. Instead, `check_data` stores computed values as **attributes on the data frame**, and `configure_model` retrieves them.
+
+``` r
+# In check_data.non_targets (R/helpers-data.R):
+attr(data, "max_set_size") <- max_set_size
+attr(data, "lure_idx_vars") <- lure_idx_vars
+
+# Later, in configure_model.imm_full (R/model_imm.R):
+max_set_size <- attr(data, "max_set_size")
+lure_idx <- attr(data, "lure_idx_vars")
+```
+
+This is the **only** way to pass metadata between pipeline steps. If your `check_data` method computes something that `configure_model` needs (e.g., the maximum set size, index variables, or transformed columns), store it as a data attribute.
+
+## Default priors structure
+
+The `default_priors` field in model definitions has a specific structure that the `configure_prior()` method interprets:
+
+``` r
+default_priors = list(
+  kappa = list(
+    main = "student_t(5, 1.75, 0.75)",  # prior for Intercept
+    effects = "normal(0, 1)",            # prior for regression coefficients
+    sd = "exponential(1)"               # prior for random effect SDs (optional)
+  ),
+  c = list(
+    main = "student_t(5, 2, 0.75)",
+    effects = "normal(0, 1)"
+  )
+)
+```
+
+-   **`main`**: Applied to the Intercept of the parameter. If the user suppresses the intercept (e.g., `kappa ~ 0 + condition`), this prior is applied to each level of the factor instead.
+-   **`effects`**: Applied to regression coefficients (slopes). If omitted, brms default priors are used for effects.
+-   **`sd`**: Applied to all random effect standard deviations for this parameter. This is optional — if omitted, brms default priors apply.
+
+The priors use the same string format as `brms::set_prior()`. These defaults are automatically applied by `bmm()` unless the user explicitly overrides them via the `prior` argument.
+
+For parameters listed in `fixed_parameters` that also appear in `parameters` (e.g., `mu1` in the IMM, which is fixed by default but can be estimated), the fixed value takes precedence unless the user provides a formula for that parameter.
 
 ## The `void_mu` pattern
 

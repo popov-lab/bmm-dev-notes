@@ -106,6 +106,35 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 </head>
 
@@ -508,7 +537,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb3-26"><a href="#cb3-26"></a>  data</span>
 <span id="cb3-27"><a href="#cb3-27"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The IMM models share methods with the <code>mixture3p</code> model, all of which are of class <code>non_targets</code> so the <code>check_data.non_targets</code> method is defined in the general file <code>R/helpers-data.R</code>. If you are adding a new model, you should check if the data requirements are similar to any existing model and define the <code>check_data</code> method only for the methods that are unique to your model.</p>
-<p>The <code>check_data.mymodel()</code> function should always take the arguments <code>model</code>, <code>data</code>, and <code>formula</code> and return the data with the necessary transformations. It should also call <code>data = NextMethod("check_data")</code> to call the check_data method of the more general class.</p>
+<p>The <code>check_data.mymodel()</code> function should always take the arguments <code>model</code>, <code>data</code>, and <code>formula</code> and return the data with the necessary transformations. It should also call <code>NextMethod("check_data")</code> to call the check_data method of the more general class.</p>
+<p>To understand what validation your model inherits, trace the <code>NextMethod</code> dispatch chain for your class. For example, the <code>imm_full</code> model with class <code>c("bmmodel", "circular", "non_targets", "imm", "imm_full")</code> dispatches as:</p>
+<ol type="1">
+<li><code>check_data.imm_full</code> — validates <code>nt_distances</code> (model-specific)</li>
+<li>→ <code>NextMethod</code> → <code>check_data.imm</code> — (if defined, otherwise skipped)</li>
+<li>→ <code>NextMethod</code> → <code>check_data.non_targets</code> — validates <code>nt_features</code>, <code>set_size</code>, creates index variables, stores data attributes</li>
+<li>→ <code>NextMethod</code> → <code>check_data.circular</code> — validates response is in radians, wraps to <span class="math inline">\((-\pi, \pi]\)</span></li>
+<li>→ <code>NextMethod</code> → <code>check_data.bmmodel</code> — generic checks (column existence for <code>resp_vars</code> and <code>other_vars</code>)</li>
+</ol>
+<p>This means a new circular model with non-targets automatically gets radian validation, non-target checks, and column existence checks — you only need to write methods for your model-specific validations.</p>
 </section>
 <section id="configure_model-methods" class="level3" data-number="4.1.4">
 <h3 data-number="4.1.4" class="anchored" data-anchor-id="configure_model-methods"><span class="header-section-number">4.1.4</span> configure_model() methods</h3>
@@ -701,7 +739,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb9-12"><a href="#cb9-12"></a>  fit<span class="sc">$</span>formula<span class="sc">$</span>family<span class="sc">$</span>link_c <span class="ot">&lt;-</span> <span class="st">"identity"</span></span>
 <span id="cb9-13"><a href="#cb9-13"></a>  fit</span>
 <span id="cb9-14"><a href="#cb9-14"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>we also have a couple of special functions for custom families in brms (see the <code>log_lik</code>and <code>posterior_predict</code> argument in the call to <code>brms::custom_familiy()</code>), which allow other typical tools from <code>brms</code> such posterior_predict of bridgesampling to work:</p>
+<p>The <code>revert_postprocess_brm</code> method is the inverse of <code>postprocess_brm</code>. It is called internally when functions like <code>conditional_effects()</code> or <code>emmeans()</code> need to temporarily undo post-processing to work with the model in its original brms representation. If your <code>postprocess_brm</code> method modifies the fitted object (e.g., changing link functions, renaming parameters), you should also define a <code>revert_postprocess_brm</code> method that reverses those changes.</p>
+<p>We also have a couple of special functions for custom families in brms (see the <code>log_lik</code>and <code>posterior_predict</code> argument in the call to <code>brms::custom_familiy()</code>), which allow other typical tools from <code>brms</code> such posterior_predict of bridgesampling to work:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a>log_lik_sdm_simple <span class="ot">&lt;-</span> <span class="cf">function</span>(i, prep) {</span>
 <span id="cb10-2"><a href="#cb10-2"></a>  mu <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">get_dpar</span>(prep, <span class="st">"mu"</span>, <span class="at">i =</span> i)</span>
 <span id="cb10-3"><a href="#cb10-3"></a>  c <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">get_dpar</span>(prep, <span class="st">"c"</span>, <span class="at">i =</span> i)</span>
@@ -720,9 +759,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="the-diffusion-decision-model-ddm" class="level2" data-number="4.3">
 <h2 data-number="4.3" class="anchored" data-anchor-id="the-diffusion-decision-model-ddm"><span class="header-section-number">4.3</span> The Diffusion Decision Model (DDM)</h2>
-<p>The DDM model is defined in <code>R/model_ddm.R</code>. It demonstrates several patterns that differ from the circular models above: the <code>void_mu</code> pattern, <code>init_ranges</code> for MCMC initialization, a custom <code>bmf2bf</code> method for response variable wrapping, and the <code>cmdstanr</code> requirement.</p>
+<p>The DDM model is defined in <code>R/model_ddm.R</code>.</p>
 <section id="model-definition-2" class="level3" data-number="4.3.1">
 <h3 data-number="4.3.1" class="anchored" data-anchor-id="model-definition-2"><span class="header-section-number">4.3.1</span> Model definition</h3>
+<p>It demonstrates several patterns that differ from the circular models above: the <code>void_mu</code> pattern, <code>init_ranges</code> for MCMC initialization, and a custom <code>bmf2bf</code> method for response variable wrapping.</p>
 <p>The DDM uses a defaults table to store parameters, links, priors, and init_ranges in one place:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>.ddm_defaults <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
 <span id="cb11-2"><a href="#cb11-2"></a>  <span class="at">parameters =</span> <span class="fu">list</span>(</span>
@@ -794,16 +834,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="user-facing-alias" class="level3" data-number="4.3.2">
 <h3 data-number="4.3.2" class="anchored" data-anchor-id="user-facing-alias"><span class="header-section-number">4.3.2</span> User-facing alias</h3>
-<p>The DDM alias additionally checks that <code>cmdstanr</code> is available, since the DDM requires it:</p>
+<p>The DDM alias follows the standard pattern — calling <code>stop_missing_args()</code> and then the internal constructor:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a>ddm <span class="ot">&lt;-</span> <span class="cf">function</span>(rt, response, <span class="at">links =</span> <span class="cn">NULL</span>, ...) {</span>
-<span id="cb12-2"><a href="#cb12-2"></a>  <span class="fu">stopif</span>(</span>
-<span id="cb12-3"><a href="#cb12-3"></a>    <span class="sc">!</span><span class="fu">requireNamespace</span>(<span class="st">"cmdstanr"</span>, <span class="at">quietly =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb12-4"><a href="#cb12-4"></a>    <span class="st">'The "cmdstanr" package is required for this functionality'</span></span>
-<span id="cb12-5"><a href="#cb12-5"></a>  )</span>
-<span id="cb12-6"><a href="#cb12-6"></a>  call <span class="ot">&lt;-</span> <span class="fu">match.call</span>()</span>
-<span id="cb12-7"><a href="#cb12-7"></a>  <span class="fu">stop_missing_args</span>()</span>
-<span id="cb12-8"><a href="#cb12-8"></a>  <span class="fu">.model_ddm</span>(<span class="at">rt =</span> rt, <span class="at">response =</span> response, <span class="at">links =</span> links, <span class="at">call =</span> call, ...)</span>
-<span id="cb12-9"><a href="#cb12-9"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb12-2"><a href="#cb12-2"></a>  call <span class="ot">&lt;-</span> <span class="fu">match.call</span>()</span>
+<span id="cb12-3"><a href="#cb12-3"></a>  <span class="fu">stop_missing_args</span>()</span>
+<span id="cb12-4"><a href="#cb12-4"></a>  <span class="fu">.model_ddm</span>(<span class="at">rt =</span> rt, <span class="at">response =</span> response, <span class="at">links =</span> links, <span class="at">call =</span> call, ...)</span>
+<span id="cb12-5"><a href="#cb12-5"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 <section id="bmf2bf-method" class="level3" data-number="4.3.3">
 <h3 data-number="4.3.3" class="anchored" data-anchor-id="bmf2bf-method"><span class="header-section-number">4.3.3</span> bmf2bf method</h3>
