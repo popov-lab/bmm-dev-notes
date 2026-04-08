@@ -303,7 +303,11 @@ This is purely a technical workaround to satisfy brms requirements. The fixed `m
 
 ## The `init_ranges` field and `create_initfun()` {#the-init_ranges-field-and-create_initfun}
 
-Models with custom families often require carefully chosen initial values for stable MCMC sampling. The `init_ranges` field in the model definition provides this:
+Models with custom families often require carefully chosen initial values for stable MCMC sampling. When a model's likelihood has hard boundaries or regions of zero density, the default brms initialization -- which draws from a wide symmetric range -- will often place chains in impossible territory, causing immediate divergences or chain failures.
+
+This is particularly relevant for response time models, where parameters have hard constraints relative to the observed data. For example, the non-decision time parameter `ndt` must be positive *and* smaller than the fastest observed RT -- otherwise the implied decision time would be negative and the likelihood undefined. Similarly, boundary separation (`bound`) must be strictly positive and within a plausible range, and extreme drift rate values can cause numerical overflow in the Wiener likelihood. Circular models (mixture2p, mixture3p) typically do not have these issues and work fine with default initialization.
+
+The `init_ranges` field in the model definition addresses this by specifying narrow, safe windows on the native (pre-link-transform) scale:
 
 ``` r
 init_ranges = list(
@@ -321,6 +325,8 @@ Each entry maps a parameter name to a `c(lower, upper)` range. The `create_initf
 3.  Generates small random values for regression coefficients, random effect SDs, and correlation matrices
 
 If `init_ranges` is `NULL` (the default), `create_initfun` returns `1`, which tells brms to use its default initialization. Most circular models (mixture2p, mixture3p) do not need custom initialization, but RT models (DDM, EZDM, cswald) and SDM do.
+
+The conversion between native and sampling scales is handled by `link_transform()` (defined in `R/helpers-parameters.R`). It supports all link functions used by bmm models (log, logit, probit, tan_half, etc.) and can apply transformations in either direction -- from the scale on which parameters are interpretable (native) to the scale on which Stan samples (sampling), and back. Model developers rarely need to call it directly; it is used automatically by `create_initfun()` when generating initial values, and by the post-processing infrastructure when converting estimates back to the native scale.
 
 ## Version tables
 
@@ -373,6 +379,12 @@ To add new models, you do not have to edit this file. The functions above are ge
 
 These files define the main generic S3 methods for checking data, creating initial value functions, configuring the model, extracting parameters, post-processing the fitted model, and combining priors. They contain the default methods for these functions, which are called by `bmm()` if no specific method is defined for a model. If you want to add a new model, you will need to add specific methods for these functions for your model. *You do not need to edit these files to add a new model.*
 
+`R/helpers-data.R` also contains several user-facing utility functions for response time data preparation. These follow a deliberate design philosophy: each function performs one well-defined task without combining too many features. They are composable -- users can pipe them together into a workflow but also inspect intermediate results at each step:
+
+-   `flag_contaminant_rts()` -- identifies likely contaminant trials by fitting a mixture of the RT distribution and a uniform contaminant process, returning per-trial posterior probabilities of contamination
+-   `validate_fast_guesses()` -- takes flagged contaminants and tests whether fast responses show chance-level accuracy consistent with guessing, using a Bayesian test
+-   `ezdm_summary_stats()` -- computes the summary statistics (mean RT, variance, accuracy) that the EZDM model requires as input, with options for robust estimation and contaminant handling
+
 ### `R/bmmformula.R` {.unnumbered}
 
 This file contains the definition of the `bmmformula` class, which is used to represent the formula for the model. It contains the `bmmformula()` function and its alias `bmf()`, which is used to create a new formula object.
@@ -420,5 +432,7 @@ This directory contains the Stan code chunks that are passed to the `brms::stanv
 -   `ddm_functions.stan` - DDM model (Wiener process likelihood)
 -   `ezdm_3par_functions.stan`, `ezdm_4par_functions.stan` - EZDM model
 -   `cswald_simple_functions.stan`, `cswald_crisk_functions.stan`, `cswald_helper_functions.stan` - cswald model
+
+When writing Stan code for bmm, keep in mind that Stan's HMC sampler requires continuous gradients to function correctly. Non-differentiable operations -- such as `fabs()` or `fmax()` -- create discontinuities in the log-density surface that can cause divergent transitions or break sampling entirely. Where such operations are mathematically necessary, bmm uses smooth approximations instead. For example, `sqrt(x^2 + epsilon)` serves as a differentiable stand-in for `|x|`. This is a standard Stan modelling technique and should be applied whenever your model's likelihood involves non-smooth functions.
 
 If you add a new model with a custom family, you will need to add Stan chunks to this directory. The naming convention is `{model_name}_{block}.stan` (e.g., `my_model_functions.stan`).
