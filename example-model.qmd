@@ -57,8 +57,7 @@ The full IMM model is defined in the following internal model class:
           a = list(main = "normal(0, 1)", effects = "normal(0, 1)"),
           c = list(main = "normal(0, 1)", effects = "normal(0, 1)"),
           s = list(main = "normal(0, 1)", effects = "normal(0, 1)")
-        ),
-        void_mu = FALSE
+        )
       ),
       # attributes
       regex = regex,
@@ -101,8 +100,6 @@ Here is a brief explanation of the different components of the model definition:
 `fixed_parameters` in the `imm` several parameters are fixed to constant values internally to identify the model. Only one of them, `mu1` is also part of the `parameters` block - this is the only fixed parameters that users can choose to estimate instead of leaving it fixed. `mu2` and `kappa2` cannot be freely estimated.
 
 `default_priors` a list of lists for each parameter in the model. Each prior has two components: `main`, the prior that will be put on the Intercept or on each level of a factor if the intercept is suppressed; `effects`, the prior to put on the regression coefficients relative to the intercept. The priors are described as in the `set_prior` function from `brms`. This information is used by the `configure_prior()` S3 method to automatically set the default priors for the model. The priors that you put here will be used by `bmm()` unless the users chooses to overwrite them.
-
-`void_mu:` For models using a custom family that do not contain a `location` or `mu` parameter, for example the diffusion model, we recommend setting up a `void_mu` parameter. This avoids arbitrarily using one of the model parameters as the `mu` parameter.
 
 `regex:` For the `imm` models, the `nt_features` and `nt_distances` variables can be specified with regular expressions, if the user sets `regex = TRUE`
 
@@ -403,8 +400,7 @@ The SDM model is defined in the file `R/model_sdm.R`. The SDM model differs in t
         mu = c(-0.5, 0.5),
         kappa = c(2.5, 3.5),
         c = c(4, 6)
-      ),
-      void_mu = FALSE
+      )
     ),
     class = c("bmmodel", "circular", "sdm", paste0("sdm_", version)),
     call = call
@@ -525,7 +521,7 @@ The DDM model is defined in `R/model_ddm.R`.
 
 ### Model definition
 
-It demonstrates several patterns that differ from the circular models above: the `void_mu` pattern, `init_ranges` for MCMC initialization, and a custom `bmf2bf` method for response variable wrapping.
+It demonstrates several patterns that differ from the circular models above: suppressing `mu` for a model with no natural location parameter, `init_ranges` for MCMC initialization, and a custom `bmf2bf` method for response variable wrapping.
 
 The DDM uses a defaults table to store parameters, links, priors, and init_ranges in one place:
 
@@ -581,8 +577,7 @@ The DDM uses a defaults table to store parameters, links, priors, and init_range
       links = .ddm_defaults[["links"]],
       fixed_parameters = .ddm_defaults[["fixed_parameters"]],
       default_priors = .ddm_defaults[["priors"]],
-      init_ranges = .ddm_defaults[["init_ranges"]],
-      void_mu = TRUE
+      init_ranges = .ddm_defaults[["init_ranges"]]
     ),
     class = c("bmmodel", "ddm"),
     call = call
@@ -594,7 +589,7 @@ The DDM uses a defaults table to store parameters, links, priors, and init_range
 
 Key differences from the circular models:
 
--   **`void_mu = TRUE`**: The DDM has no natural location parameter. A dummy `mu` is included and fixed to 0 (see `fixed_parameters`). This satisfies brms' requirement that every custom family has a `mu` parameter.
+-   **No natural `mu`**: The DDM has no location parameter. A dummy `mu` is included in the family's `dpars` and fixed to 0 via `fixed_parameters`, which satisfies brms' requirement that every custom family has a `mu` parameter.
 -   **Two response variables**: `resp_vars = nlist(rt, response)` — reaction time and binary choice. This requires a custom `bmf2bf` method.
 -   **`init_ranges`**: Specifies plausible starting ranges for each parameter to ensure stable MCMC sampling. The `create_initfun()` step uses these.
 -   **Short class chain**: `c("bmmodel", "ddm")` — no intermediate domain class. RT models don't share as many check_data patterns as the circular models do.
@@ -665,7 +660,7 @@ configure_model.ddm <- function(model, data, formula) {
 
 Note that:
 
--   `mu` is included in `dpars` with an `identity` link (the void_mu pattern)
+-   `mu` is included in `dpars` with an `identity` link and fixed to 0 (the `mu`-suppression pattern)
 -   `vars = "dec[n]"` passes the decision variable to the Stan likelihood
 -   The `log_lik` and `posterior_predict` functions use the `dddm()` and `rddm()` distribution functions from `R/distributions.R`
 -   `configure_model` returns `nlist(formula, data, stanvars)` without `init` — initialization is handled by `create_initfun()`
@@ -761,8 +756,7 @@ The model constructor then indexes into this table:
       links = .ezdm_version_table[[version]][["links"]],
       fixed_parameters = .ezdm_version_table[[version]][["fixed_parameters"]],
       default_priors = .ezdm_version_table[[version]][["priors"]],
-      init_ranges = .ezdm_version_table[[version]][["init_ranges"]],
-      void_mu = TRUE
+      init_ranges = .ezdm_version_table[[version]][["init_ranges"]]
     ),
     class = c("bmmodel", "ezdm"),
     call = call

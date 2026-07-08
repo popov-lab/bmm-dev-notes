@@ -15,8 +15,9 @@ Create a file with a template for adding a new model (for developers)
 ``` r
 use_model_template(
   model_name,
+  versions = NULL,
   custom_family = FALSE,
-  stanvar_blocks = c("data", "tdata", "parameters", 
+  stanvar_blocks = c("data", "tdata", "parameters",
                      "tparameters", "model", "likelihood",
                      "genquant", "functions"),
   open_files = TRUE,
@@ -29,6 +30,7 @@ use_model_template(
 | Argument | Description |
 |-----------------------|-------------------------------------------------|
 | `model_name` | A string with the name of the model. The file will be named bmm_model_model_name.R and all necessary functions will be created with the appropriate names and structure. The file will be saved in the ⁠R/⁠ directory |
+| `versions` | An optional character vector naming the model versions. If `NULL` (default), the template generates a flat `.{model_name}_defaults` specification (like ddm). If supplied, it generates a `.{model_name}_version_table` with one entry per version and a versioned alias validated with `match.arg()` (like cswald). |
 | `custom_family` | Logical; Do you plan to define a brms::custom_family()? If TRUE the function will add a section for the custom family, placeholders for the stan_vars and corresponding empty .stan files in ⁠inst/stan_chunks/⁠, that you can fill For an example, see the sdmSimple model in ⁠/R/bmm_model_sdmSimple.R⁠. If FALSE (default) the function will not add the custom family section nor stan files. |
 | `stanvar_blocks` | A character vector with the names of the blocks that will be added to the custom family section. See brms::stanvar() for more details. The default lists all the possible blocks, but it is unlikely that you will need all of them. You can specify a vector of only those that you need. The function will add a section for each block in the list |
 | `open_files` | Logical; If TRUE (default), the function will open the template files that were created in RStudio |
@@ -58,56 +60,81 @@ Now you can fill the files with the appropriate code. The Stan files will be emp
 #############################################################################!
 # MODELS                                                                 ####
 #############################################################################!
-# see file 'R/model_mixture3p.R' for an example
+# see 'R/model_ddm.R' (flat defaults) or 'R/model_cswald.R' (versioned) for examples
 
-.model_gcm <- function(resp_var1 = NULL, required_arg1 = NULL, required_arg2 = NULL, links = NULL, version = NULL, call = NULL, ...) {
-   out <- structure(
-     list(
-       resp_vars = nlist(resp_var1),
-       other_vars = nlist(required_arg1, required_arg2),
-       domain = '',
-       task = '',
-       name = '',
-       citation = '',
-       version = version,
-       requirements = '',
-       parameters = list(),
-       links = list(),
-       fixed_parameters = list(),
-       default_priors = list(par1 = list(), par2 = list()),
-       init_ranges = NULL,
-       void_mu = FALSE
-     ),
-     class = c('bmmodel', 'gcm'),
-     call = call
-   )
-   if(!is.null(version)) class(out) <- c(class(out), paste0("gcm_",version))
-   out$links[names(links)] <- links
-   out
+.gcm_defaults <- list(
+  parameters = list(
+    par1 = "Parameter 1 = description of parameter 1",
+    par2 = "Parameter 2 = description of parameter 2"
+  ),
+  links = list(
+    par1 = "identity",
+    par2 = "log"
+  ),
+  fixed_parameters = list(
+    mu = 0
+  ),
+  priors = list(
+    par1 = list(main = "normal(0, 1)", effects = "normal(0, 0.5)"),
+    par2 = list(main = "normal(0, 0.5)", effects = "normal(0, 0.5)")
+  ),
+  init_ranges = list(
+    par1 = c(-1, 1),
+    par2 = c(0.5, 1.5)
+  )
+)
+
+
+.model_gcm <- function(resp_var1 = NULL, required_arg1 = NULL, required_arg2 = NULL,
+                                  links = NULL, call = NULL, ...) {
+  out <- structure(
+    list(
+      resp_vars = nlist(resp_var1),
+      other_vars = nlist(required_arg1, required_arg2),
+      domain = "",
+      task = "",
+      name = "",
+      citation = "",
+      version = "NA",
+      requirements = "",
+      parameters = .gcm_defaults[["parameters"]],
+      links = .gcm_defaults[["links"]],
+      fixed_parameters = .gcm_defaults[["fixed_parameters"]],
+      default_priors = .gcm_defaults[["priors"]],
+      init_ranges = .gcm_defaults[["init_ranges"]]
+    ),
+    class = c("bmmodel", "gcm"),
+    call = call
+  )
+  out$links[names(links)] <- links
+  out
 }
 # user facing alias
 # information in the title and details sections will be filled in
 # automatically based on the information in the .model_gcm()$info
  
 #' @title `r .model_gcm()$name`
-#' @name Model Name#' @details `r model_info(.model_gcm())`
+#' @name gcm
+#' @details `r model_info(.model_gcm())`
 #' @param resp_var1 A description of the response variable
 #' @param required_arg1 A description of the required argument
 #' @param required_arg2 A description of the required argument
-#' @param links A list of links for the parameters.
-#' @param version A character label for the version of the model. Can be empty or NULL if there is only one version. 
+#' @param links A list of links for the model parameters.
 #' @param ... used internally for testing, ignore it
 #' @return An object of class `bmmodel`
 #' @export
 #' @examples
 #' \dontrun{
-#' # put a full example here (see 'R/model_mixture3p.R' for an example)
+#' # put a full example here (see 'R/model_ddm.R' for an example)
 #' }
-gcm <- function(resp_var1, required_arg1, required_arg2, links = NULL, version = NULL, ...) {
+gcm <- function(resp_var1, required_arg1, required_arg2, links = NULL, ...) {
    call <- match.call()
    stop_missing_args()
+   # uncomment if your model requires a specific backend:
+   # stopif(!requireNamespace("cmdstanr", quietly = TRUE),
+   #        'The "cmdstanr" package is required for this model.')
    .model_gcm(resp_var1 = resp_var1, required_arg1 = required_arg1, required_arg2 = required_arg2,
-                links = links, version = version,call = call, ...)
+                links = links, call = call, ...)
 }
 
 
@@ -217,9 +244,9 @@ postprocess_brm.gcm <- function(model, fit) {
 
 Now you have to:
 
-1.  **Fill the `.model_gcm` function** with the appropriate code. This function should return a list with all the variables specified above. The class of the list should be `c('bmmodel', 'gcm')`. Rename the response arguments and the other required arguments, or delete the other arguments if you do not have any. You can see an example in the `model_sdm.R` file. Specify the parameters of the model, the link functions, what if any parameters are fixed (and to what value). It's crucial that you set default priors for every parameter of the model, which should be informed by knowledge in the field.
+1.  **Fill the `.gcm_defaults` specification and the `.model_gcm` constructor.** Most of your work is in `.gcm_defaults`: specify the model's parameters (with descriptions), their link functions, which parameters are fixed (and to what value), the default priors, and the initialization ranges. It's crucial that you set default priors for every parameter, informed by knowledge in the field — see `.ddm_defaults` in `model_ddm.R` for a worked example. In `.model_gcm()`, rename the response and required arguments (or delete the extras if you have none) and fill in the metadata (`domain`, `task`, `name`, `citation`, `requirements`). The constructor lists every field of the model object inline and reads the parameter specification from `.gcm_defaults`; its class must be `c('bmmodel', 'gcm')`.
 
-    If your model has multiple versions with different parameter sets, consider using the **version table pattern** (see [Section @sec-example-model] for the EZDM example) rather than if/else logic.
+    If your model has multiple versions with different parameter sets, generate the scaffold with `use_model_template("gcm", versions = c("v1", "v2"))`. This produces a `.gcm_version_table` with one entry per version, a `version` argument validated with `match.arg()`, and a constructor that passes `spec = .gcm_version_table[[version]]` — instead of the flat `.gcm_defaults`.
 
 2.  **Adjust the user-facing alias.** Here you should only rename the required arguments and fill in the `@examples` section with a full example. Everything else will be filled in automatically based on the information in the `.model_gcm` function.
 
@@ -231,7 +258,7 @@ Now you have to:
     -   Your model uses **aggregate data** with `vreal()`, `vint()`, `trials()` (e.g., EZDM)
     -   Your model needs special response wrapping
 
-    Keep in mind that `brms` automatically interprets this formula as the linear model formula for the `mu` parameter of your custom family. If your model does not have a natural `mu` parameter, set `void_mu = TRUE` in your model definition and include `mu = 0` in `fixed_parameters`. See the DDM example in [Section @sec-example-model] for details on this pattern. *If your model has a single response variable and no special wrapping, you can delete this section.*
+    Keep in mind that `brms` automatically interprets this formula as the linear model formula for the `mu` parameter of your custom family. If your model does not have a natural `mu` parameter, suppress it: include `mu = 0` in `fixed_parameters`, add a dummy `mu` (identity link) to the family's `dpars`, and write the first formula line yourself (as DDM does with `rt | dec(response) ~ 1`). See the DDM example in [Section @sec-example-model] and the *Suppressing `mu`* section of the architecture chapter for details. *If your model has a single response variable and no special wrapping, you can delete this section.*
 
 5.  **Fill the `configure_model.gcm` function** with the appropriate code. This function should construct the formula, the family, and the stanvars, and return them as `nlist(formula, data, stanvars)`. Note that `configure_model` does **not** return initial values — initialization is handled separately by `create_initfun()` using the `init_ranges` field in your model definition.
 

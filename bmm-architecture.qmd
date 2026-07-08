@@ -105,28 +105,42 @@ The `bmmformula` is converted to a `brmsformula` during model configuration via 
 
 ## Models
 
-All models in the package are defined as S3 classes and follow a strict template. This allows us to implement general methods for handling model fitting, data checking, and post-processing. Each model has an internal function that defines the model and its parameters, and a user-facing alias. For a complete example model file and an explanation, see [Section @sec-example-model]. The general model template looks like this:
+All models in the package are defined as S3 classes and follow a strict template. This allows us to implement general methods for handling model fitting, data checking, and post-processing. Each model has an internal constructor (`.model_<name>()`) that defines the model and its parameters, and a user-facing alias. To keep the specification easy to read and edit, the parameters, links, fixed parameters, priors, and initialization ranges live in a separate `.<name>_defaults` list — or, for models with several versions, in a `.<name>_version_table` (see [Version tables]) — and the constructor spells out each field of the model object inline, reading from that list. For a complete example model file and an explanation, see [Section @sec-example-model]. The general model template looks like this:
 
 ``` r
+# the model's parameter specification (one such list per version in a version table)
+.my_new_model_defaults <- list(
+  parameters = list(
+    par1 = "Parameter 1 = description of parameter 1",
+    par2 = "Parameter 2 = description of parameter 2"
+  ),
+  links = list(par1 = "identity", par2 = "log"),
+  fixed_parameters = list(mu = 0),
+  priors = list(
+    par1 = list(main = "normal(0, 1)", effects = "normal(0, 0.5)"),
+    par2 = list(main = "normal(0, 0.5)", effects = "normal(0, 0.5)")
+  ),
+  init_ranges = list(par1 = c(-1, 1), par2 = c(0.5, 1.5))
+)
+
 .model_my_new_model <- function(resp_var1 = NULL, required_arg1 = NULL,
-                                required_arg2 = NULL, links = NULL, version = NULL,
+                                required_arg2 = NULL, links = NULL,
                                 call = NULL, ...) {
   out <- structure(
     list(
       resp_vars = nlist(resp_var1),
-      other_vars = nlist(),
+      other_vars = nlist(required_arg1, required_arg2),
       domain = "",
       task = "",
       name = "",
-      version = version,
       citation = "",
+      version = "NA",
       requirements = "",
-      parameters = list(),
-      links = list(),
-      fixed_parameters = list(),
-      default_priors = list(),
-      init_ranges = NULL,
-      void_mu = FALSE
+      parameters = .my_new_model_defaults[["parameters"]],
+      links = .my_new_model_defaults[["links"]],
+      fixed_parameters = .my_new_model_defaults[["fixed_parameters"]],
+      default_priors = .my_new_model_defaults[["priors"]],
+      init_ranges = .my_new_model_defaults[["init_ranges"]]
     ),
     class = c("bmmodel", "my_new_model"),
     call = call
@@ -136,16 +150,15 @@ All models in the package are defined as S3 classes and follow a strict template
 }
 ```
 
-Key fields in the model definition:
+The `.my_new_model_defaults` list holds the parameter specification (one such list per version in a version table). Its fields are:
 
--   `resp_vars` - Named list of response variable(s) the user must provide in their data
--   `other_vars` - Named list of additional variables (e.g., non-target features, set size)
 -   `parameters` - Named list of model parameters with descriptions
 -   `links` - Named list of link functions for each parameter (e.g., `"log"`, `"identity"`, `"logit"`, `"tan_half"`)
 -   `fixed_parameters` - Named list of parameters fixed to constant values (e.g., `list(mu = 0)`)
--   `default_priors` - Named list with `main` (intercept) and `effects` (slopes) priors per parameter
+-   `priors` - Named list with `main` (intercept) and `effects` (slopes) priors per parameter. The constructor stores this under the model object's `default_priors` field
 -   `init_ranges` - Named list of `c(lower, upper)` vectors for MCMC initialization (see [The `init_ranges` field and `create_initfun()`](#the-init_ranges-field-and-create_initfun))
--   `void_mu` - Logical; whether the model has no natural `mu` parameter (see [The `void_mu` pattern])
+
+The constructor copies these into the model object (renaming `priors` to `default_priors`) alongside the response and auxiliary variables (`resp_vars`, `other_vars`), the model metadata (`domain`, `task`, `name`, `citation`, `requirements`), and the `version`. Keeping the fields inline means a new field on the model object is a one-line addition you can see and copy directly; the trade-off is that older models need updating when a field is added (a periodic, mechanical refactor).
 
 Each model is accompanied by a user-facing alias, the documentation of which is generated automatically based on the info list in the model definition.
 
@@ -164,17 +177,19 @@ Each model is accompanied by a user-facing alias, the documentation of which is 
 #' @export
 #' @examples
 #' \dontrun{
-#' # put a full example here (see 'R/model_mixture3p.R' for an example)
+#' # put a full example here (see 'R/model_ddm.R' for an example)
 #' }
 my_new_model <- function(resp_var1, required_arg1, required_arg2,
-                         links = NULL, version = NULL, ...) {
+                         links = NULL, ...) {
   call <- match.call()
   stop_missing_args()
   .model_my_new_model(resp_var1 = resp_var1, required_arg1 = required_arg1,
-                      required_arg2 = required_arg2, links = links, version = version,
+                      required_arg2 = required_arg2, links = links,
                       call = call, ...)
 }
 ```
+
+For a versioned model, the alias instead carries a `version = c("v1", "v2")` argument validated with `version <- match.arg(version)`, and passes the chosen `version` on to the constructor (see `cswald` for a worked example). `use_model_template()` generates whichever variant you ask for via its `versions` argument.
 
 Then users can fit the model using the `bmm()` function, and the model will be automatically recognized and handled by the package:
 
@@ -184,7 +199,7 @@ fit <- bmm(formula = my_bmmformula,
            model = my_new_model(resp_var1, required_arg1, required_arg2))
 ```
 
-## Model domains and class chains
+## Model domains and class chains {#sec-class-chains}
 
 Models use hierarchical S3 class chains that encode the model taxonomy. The class chain determines which S3 methods are dispatched. The general pattern is:
 
@@ -290,16 +305,20 @@ The priors use the same string format as `brms::set_prior()`. These defaults are
 
 For parameters listed in `fixed_parameters` that also appear in `parameters` (e.g., `mu1` in the IMM, which is fixed by default but can be estimated), the fixed value takes precedence unless the user provides a formula for that parameter.
 
-## The `void_mu` pattern
+## Suppressing `mu` for models without a location parameter
 
-The `brms` package requires every custom family to have a `mu` parameter (the location parameter). However, some models -- particularly response time and decision models like DDM, EZDM, and cswald -- do not have a natural location/mu parameter. For these models, setting `void_mu = TRUE` in the model definition signals to the package infrastructure that:
+The `brms` package requires every custom family to have a `mu` parameter (the location parameter). However, some models -- particularly response time and decision models like DDM, EZDM, and cswald -- do not have a natural location/mu parameter. These models suppress `mu` rather than arbitrarily promoting one of their parameters to it:
 
 1.  A dummy `mu` parameter is included in the family's `dpars` with an `identity` link
-2.  The `mu` intercept is fixed to 0 via `fixed_parameters = list(mu = 0)`
-3.  Users do not specify formulas for `mu` in their `bmmformula`
-4.  The `bmf2bf` method for these models constructs the first formula line differently (e.g., `rt | dec(response) ~ 1` for DDM, rather than using `mu` as a response)
+2.  The `mu` intercept is fixed to 0 by adding `mu = 0` to `fixed_parameters`
+3.  Users do not specify a formula for `mu` in their `bmmformula`
+4.  The model's `bmf2bf` method constructs the first formula line differently (e.g., `rt | dec(response) ~ 1` for DDM, rather than using `mu` as a response)
 
-This is purely a technical workaround to satisfy brms requirements. The fixed `mu = 0` prior ensures it has no effect on model estimation.
+This is purely a technical workaround to satisfy brms requirements; the fixed `mu = 0` ensures it has no effect on estimation.
+
+::: callout-note
+Earlier versions tracked this with a `void_mu` flag in the model definition. The flag was never read by the infrastructure -- suppression is handled entirely by `fixed_parameters` and the family's `dpars` -- and it has been removed. If you see `void_mu` in older code or notes, it is dead and can be deleted.
+:::
 
 ## The `init_ranges` field and `create_initfun()` {#the-init_ranges-field-and-create_initfun}
 
@@ -353,7 +372,7 @@ Some models support multiple versions with different parameter sets. Two pattern
 )
 ```
 
-The model constructor then indexes into this table:
+The model constructor then indexes into this table for each field, selecting the entry for the requested `version`:
 
 ``` r
 parameters = .ezdm_version_table[[version]][["parameters"]],
@@ -361,7 +380,7 @@ links = .ezdm_version_table[[version]][["links"]],
 ...
 ```
 
-This pattern is cleaner and easier to extend. New models with multiple versions should prefer this approach.
+The table is the single source of truth for the version-specific specification. This pattern is cleaner and easier to extend than if/else logic, and new models with multiple versions should prefer it — `use_model_template("mymodel", versions = c("v1", "v2"))` generates it for you.
 
 ## File organization
 
