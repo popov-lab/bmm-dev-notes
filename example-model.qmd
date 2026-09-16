@@ -4,13 +4,13 @@ All models in the package are defined as S3 classes and follow a strict template
 
 ## The Interference Measurement Model (IMM)
 
-The model is defined in the file `R/model_imm.R.` Let's go through the different parts.
+The model is defined in the file `R/model_imm.R`. Let's go through the different parts.
 
 ### Model definition
 
 The full IMM model is defined in the following internal model class:
 
-``` r
+```{.r filename="R/model_imm.R" bmm-src=".model_imm"}
 .model_imm <-
   function(resp_error = NULL, nt_features = NULL, nt_distances = NULL,
            set_size = NULL, regex = FALSE, version = "full", links = NULL,
@@ -111,7 +111,7 @@ Here is a brief explanation of the different components of the model definition:
 
 The model alias is a user-facing function that calls the internal model function. It is defined as follows:
 
-``` r
+```{.r filename="R/model_imm.R" bmm-src="imm"}
 #' @title `r .model_imm()$name`
 #' @description Three versions of the `r .model_imm()$name` - the full, bsc, and abc.
 #' `IMMfull()`, `IMMbsc()`, and `IMMabc()` are deprecated and will be removed in the future.
@@ -230,7 +230,7 @@ The details will be filled out automatically from the model definition. This doe
 
 Each model should have a `check_data.modelname()` method that checks if the data contains all necessary information for fitting the model. For the IMM, the `bsc` and `full` versions require a special check for the `nt_distances` variables:
 
-``` r
+```{.r filename="R/model_imm.R" bmm-src="check_data.imm_bsc,check_data.imm_full,.check_data_imm_dist"}
 #' @export
 check_data.imm_bsc <- function(model, data, formula) {
   data <- .check_data_imm_dist(model, data, formula)
@@ -270,13 +270,17 @@ The `check_data.mymodel()` function should always take the arguments `model`, `d
 
 To understand what validation your model inherits, trace the `NextMethod` dispatch chain for your class. For example, the `imm_full` model with class `c("bmmodel", "circular", "non_targets", "imm", "imm_full")` dispatches as:
 
-1.  `check_data.imm_full` — validates `nt_distances` (model-specific)
-2.  → `NextMethod` → `check_data.imm` — (if defined, otherwise skipped)
+1.  `check_data.bmmodel` — generic checks (data is coercible to a data frame and has rows), then sets the `data_name` and `checked` attributes
+2.  → `NextMethod` → `check_data.circular` — validates response is in radians, wraps to $(-\pi, \pi]$
 3.  → `NextMethod` → `check_data.non_targets` — validates `nt_features`, `set_size`, creates index variables, stores data attributes
-4.  → `NextMethod` → `check_data.circular` — validates response is in radians, wraps to $(-\pi, \pi]$
-5.  → `NextMethod` → `check_data.bmmodel` — generic checks (column existence for `resp_vars` and `other_vars`)
+4.  → `NextMethod` → no `check_data` method is defined for the `imm` class, so the chain passes straight through it
+5.  → `NextMethod` → `check_data.imm_full` — validates `nt_distances` (model-specific)
 
-This means a new circular model with non-targets automatically gets radian validation, non-target checks, and column existence checks — you only need to write methods for your model-specific validations.
+**The order is general first, specific last** — the reverse of what most people expect. S3 dispatch walks the class vector from left to right, and `"bmmodel"` is the leftmost class, so `check_data.bmmodel` runs *before* `check_data.imm_full`, not after. A class with no method for the generic is simply skipped.
+
+This matters for two reasons. Your model-specific method runs last, so it can rely on everything the general methods have already done: by the time `check_data.imm_full` runs, the response has been wrapped to radians and `max_set_size` is already an attribute on the data. And it means a fall-through fallback must go on `.default`, not on `.bmmodel` — see @sec-conventions.
+
+This also means a new circular model with non-targets automatically gets radian validation, non-target checks, and column existence checks — you only need to write methods for your model-specific validations.
 
 ### configure_model() methods
 
@@ -284,7 +288,7 @@ The configure_model.mymodel() method is where you specify the model formula, the
 
 (we show only the `IMMfull` version)
 
-``` r
+```{.r filename="R/model_imm.R" bmm-src="configure_model.imm_full"}
 configure_model.imm_full <- function(model, data, formula) {
   # retrieve arguments from the data check
   max_set_size <- attr(data, "max_set_size")
@@ -306,7 +310,7 @@ configure_model.imm_full <- function(model, data, formula) {
 
 The three IMM versions differ only in the `theta` expression and in which extra non-linear terms they add, so everything they share lives in three private helpers at the top of `R/model_imm.R`:
 
-``` r
+```{.r filename="R/model_imm.R" bmm-src=".base_imm_formula,.add_imm_mixture_terms,.imm_mixture_family"}
 .base_imm_formula <- function(model, formula) {
   bmf2bf(model, formula) +
     brms::lf(kappa2 ~ 1) +
@@ -344,7 +348,7 @@ The configure_model method should always take the arguments `model`, `data`, and
 
 Inside the configure_model method the `brmsformula` is generated using the `bmf2bf` function. This function converts the `bmmformula` passed to `bmm()` function into a `brmsformula` based on the information for the response variables provided in the `bmmmodel` object. There is a general method in `R/bmmformula.R` to construct the formula for all models with a single response variable.
 
-``` r
+```{.r filename="R/bmmformula.R" bmm-src="bmf2bf.bmmodel,bmf2bf.default"}
 # If no model specific methods exist, it will construct a base brms formula from the first resp_vars
 # We do it this way because most models require just one response variable
 #' @export
@@ -374,7 +378,7 @@ The SDM model is defined in the file `R/model_sdm.R`. The SDM model differs in t
 
 ### Model definition
 
-``` r
+```{.r filename="R/model_sdm.R" bmm-src=".model_sdm"}
 .model_sdm <- function(resp_error = NULL, links = NULL, version = "simple", call = NULL, ...) {
   out <- structure(
     list(
@@ -431,7 +435,7 @@ The model definition is similar to the IMM model, but the SDM model only require
 
 The SDM shares a class with other `circular` models, so most of the data checks are performed by `check_data.circular` method, defined in the general file `R/helpers-data.R`. The `sdm` however, samples much more quickly in Stan, if the data is sorted by the predictor variables, so we have the following custom data check method for the sdm:
 
-``` r
+```{.r filename="R/model_sdm.R" bmm-src="check_data.sdm"}
 #' @export
 check_data.sdm <- function(model, data, formula) {
   # data sorted by predictors is necessary for speedy computation of normalizing constant
@@ -449,7 +453,7 @@ One detail in that function is worth copying. brms drops rows with missing value
 
 The configure_model method for the SDM model is different compared to the IMM model, as it requires custom STAN code. The method is defined as follows:
 
-``` r
+```{.r filename="R/model_sdm.R" bmm-src="configure_model.sdm"}
 #' @export
 configure_model.sdm <- function(model, data, formula) {
   # note - c has a log link, but I've coded it manually for computational efficiency
@@ -516,7 +520,7 @@ Converting the `bmmformula` to a `brmsformula` and collecting all arguments is d
 
 Unlike the `imm` model, the `sdm` model requires some special post-processing because of the way the link functions are coded. These methods are applied *after* the brmsfit object is returned, at the very end of the *bmm()* pipeline:
 
-``` r
+```{.r filename="R/model_sdm.R" bmm-src="postprocess_brm.sdm,revert_postprocess_brm.sdm"}
 #' @export
 postprocess_brm.sdm <- function(model, fit, ...) {
   # manually set link_c to "log" since I coded it manually
@@ -537,7 +541,7 @@ The `revert_postprocess_brm` method is the inverse of `postprocess_brm`. It is c
 
 We also have a couple of special functions for custom families in brms (see the `log_lik`and `posterior_predict` argument in the call to `brms::custom_familiy()`), which allow other typical tools from `brms` such posterior_predict of bridgesampling to work:
 
-``` r
+```{.r filename="R/model_sdm.R" bmm-src="log_lik_sdm_simple,posterior_predict_sdm_simple"}
 log_lik_sdm_simple <- function(i, prep) {
   mu <- brms::get_dpar(prep, "mu", i = i)
   c <- brms::get_dpar(prep, "c", i = i)
@@ -564,7 +568,7 @@ It demonstrates several patterns that differ from the circular models above: sup
 
 The DDM uses a defaults table to store parameters, links, priors, and init_ranges in one place:
 
-``` r
+```{.r filename="R/model_ddm.R" bmm-src=".ddm_defaults,.model_ddm"}
 .ddm_defaults <- list(
   parameters = list(
     drift = "Drift rate = Average rate of evidence accumulation of the decision processes",
@@ -637,7 +641,7 @@ Key differences from the circular models:
 
 The DDM alias follows the standard pattern — calling `stop_missing_args()` and then the internal constructor:
 
-``` r
+```{.r filename="R/model_ddm.R" bmm-src="ddm"}
 ddm <- function(rt, response, links = NULL, ...) {
   call <- match.call()
   stop_missing_args()
@@ -649,7 +653,7 @@ ddm <- function(rt, response, links = NULL, ...) {
 
 Because the DDM has two response variables (rt and response), it needs a custom `bmf2bf` method to construct the first line of the brms formula with the proper response wrapping:
 
-``` r
+```{.r filename="R/model_ddm.R" bmm-src="bmf2bf.ddm"}
 #' @export
 bmf2bf.ddm <- function(model, formula) {
   rt <- model$resp_vars$rt
@@ -662,7 +666,7 @@ This creates a formula like `rt | dec(response) ~ 1`, where `dec()` tells brms w
 
 ### configure_model method
 
-``` r
+```{.r filename="R/model_ddm.R" bmm-src="configure_model.ddm"}
 #' @export
 configure_model.ddm <- function(model, data, formula) {
   formula <- bmf2bf(model, formula)
@@ -708,7 +712,7 @@ Note that:
 
 The DDM has thorough data validation for RT and response variables:
 
-``` r
+```{.r filename="R/model_ddm.R" bmm-src="check_data.ddm" bmm-excerpt="abridged"}
 #' @export
 check_data.ddm <- function(model, data, formula) {
   rt_var <- model$resp_vars$rt
@@ -750,7 +754,7 @@ The EZDM model (`R/model_ezdm.R`) demonstrates two additional patterns: the **ve
 
 Instead of using if/else logic to handle version-specific parameters (as the IMM does), the EZDM uses a lookup table:
 
-``` r
+```{.r filename="R/model_ezdm.R" bmm-src=".ezdm_version_table" bmm-excerpt="abridged"}
 .ezdm_version_table <- list(
   "3par" = list(
     parameters = list(
@@ -811,7 +815,7 @@ This pattern is cleaner and easier to extend than conditional logic. New models 
 
 The EZDM operates on aggregate statistics (mean RT, variance of RT, number of upper responses, total trials) rather than trial-level data. This requires version-specific `bmf2bf` methods that pack multiple response variables into brms' special response terms:
 
-``` r
+```{.r filename="R/model_ezdm.R" bmm-src="bmf2bf.ezdm_3par"}
 #' @export
 bmf2bf.ezdm_3par <- function(model, formula) {
   mean_rt <- model$resp_vars$mean_rt
@@ -836,7 +840,7 @@ These special brms terms make the additional variables available in the Stan lik
 
 Each EZDM version has its own `configure_model` method because the Stan likelihood functions differ:
 
-``` r
+```{.r filename="R/model_ezdm.R" bmm-src="configure_model.ezdm_3par"}
 #' @export
 configure_model.ezdm_3par <- function(model, data, formula) {
   formula <- bmf2bf(model, formula)

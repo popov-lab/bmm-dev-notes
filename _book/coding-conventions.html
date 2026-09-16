@@ -360,7 +360,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="where-to-validate-arguments" class="level2" data-number="6.5">
 <h2 data-number="6.5" class="anchored" data-anchor-id="where-to-validate-arguments"><span class="header-section-number">6.5</span> Where to validate arguments</h2>
 <p>Validate in the <strong>exported constructor only</strong> — the user-facing alias. <code>.model_*()</code>, <code>configure_model.*()</code> and private helpers should not, because their error messages name arguments the user never typed. The alias is the one place where the argument the message refers to is the argument the user actually passed:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-label="1"></a>m3 <span class="ot">&lt;-</span> <span class="cf">function</span>(resp_cats, num_options, <span class="at">choice_rule =</span> <span class="st">"softmax"</span>, <span class="at">version =</span> <span class="st">"custom"</span>, ...) {</span>
+<div class="code-with-filename">
+<div class="code-with-filename-file">
+<pre><strong>R/model_m3.R</strong></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5" data-filename="R/model_m3.R" data-bmm-src="m3" data-bmm-excerpt="abridged"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-label="1"></a>m3 <span class="ot">&lt;-</span> <span class="cf">function</span>(resp_cats, num_options, <span class="at">choice_rule =</span> <span class="st">"softmax"</span>, <span class="at">version =</span> <span class="st">"custom"</span>, ...) {</span>
 <span id="cb5-2"><a href="#cb5-2" aria-label="2"></a>  call <span class="ot">&lt;-</span> <span class="fu">match.call</span>()</span>
 <span id="cb5-3"><a href="#cb5-3" aria-label="3"></a>  <span class="fu">stop_missing_args</span>()</span>
 <span id="cb5-4"><a href="#cb5-4" aria-label="4"></a>  <span class="fu">stopif</span>(</span>
@@ -369,6 +373,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb5-7"><a href="#cb5-7" aria-label="7"></a>  )</span>
 <span id="cb5-8"><a href="#cb5-8" aria-label="8"></a>  <span class="fu">.model_m3</span>(...)</span>
 <span id="cb5-9"><a href="#cb5-9" aria-label="9"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 <p><code>check_data.*()</code> is the exception, and not really an exception: it validates properties of the <em>data</em>, which the constructor cannot see. “Your <code>nt_distances</code> columns contain negative values” is a data message and belongs there.</p>
 </section>
 <section id="log_lik-and-posterior_predict" class="level2" data-number="6.6">
@@ -383,13 +388,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb6-7"><a href="#cb6-7" aria-label="7"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>brms checks the first arguments when you build the family: <code>log_lik</code> must start with <code>(i, prep)</code> and <code>posterior_predict</code> with <code>(i, prep, ...)</code>.</p>
 <p>The contract inside is easy to get wrong in one specific way. <code>brms::get_dpar(prep, "par", i = i)</code> returns a <strong>vector with one value per posterior draw</strong>, not a scalar, and your function must return a vector of that same length. The response is a scalar, <code>prep$data$Y[i]</code>:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-label="1"></a>log_lik_sdm_simple <span class="ot">&lt;-</span> <span class="cf">function</span>(i, prep) {</span>
+<div class="code-with-filename">
+<div class="code-with-filename-file">
+<pre><strong>R/model_sdm.R</strong></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7" data-filename="R/model_sdm.R" data-bmm-src="log_lik_sdm_simple"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-label="1"></a>log_lik_sdm_simple <span class="ot">&lt;-</span> <span class="cf">function</span>(i, prep) {</span>
 <span id="cb7-2"><a href="#cb7-2" aria-label="2"></a>  mu <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">get_dpar</span>(prep, <span class="st">"mu"</span>, <span class="at">i =</span> i)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-label="3"></a>  c <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">get_dpar</span>(prep, <span class="st">"c"</span>, <span class="at">i =</span> i)</span>
 <span id="cb7-4"><a href="#cb7-4" aria-label="4"></a>  kappa <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">get_dpar</span>(prep, <span class="st">"kappa"</span>, <span class="at">i =</span> i)</span>
 <span id="cb7-5"><a href="#cb7-5" aria-label="5"></a>  y <span class="ot">&lt;-</span> prep<span class="sc">$</span>data<span class="sc">$</span>Y[i]</span>
 <span id="cb7-6"><a href="#cb7-6" aria-label="6"></a>  <span class="fu">dsdm</span>(y, mu, c, kappa, <span class="at">log =</span> T)</span>
 <span id="cb7-7"><a href="#cb7-7" aria-label="7"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 <p>A density function that collapses its arguments (an <code>if</code> on a vector, a <code>sum()</code>) will return a scalar here, and brms will recycle it across all draws without complaint. The posterior predictive checks then look suspiciously clean. Check <code>length()</code> of what you return.</p>
 <p><code>loop</code> in <code>custom_family()</code> is about the generated <em>Stan</em> code, not about this R function. With <code>loop = FALSE</code> brms emits a vectorized likelihood call, and with <code>loop = TRUE</code> it emits one call per observation. The consequence you will hit: with <code>loop = FALSE</code> you may not use the <code>[n]</code> index in <code>vars</code>, and brms stops with “Invalid use of index ‘[n]’ in an unlooped custom likelihood”. SDM uses <code>loop = FALSE</code> and no <code>vars</code>; EZDM uses <code>loop = TRUE</code> with <code>vars = c("vreal1[n]", "vint1[n]", "trials[n]")</code>.</p>
 </section>

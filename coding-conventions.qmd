@@ -92,7 +92,7 @@ Do not write `return(out)` as the last line of a function.
 
 Validate in the **exported constructor only** — the user-facing alias. `.model_*()`, `configure_model.*()` and private helpers should not, because their error messages name arguments the user never typed. The alias is the one place where the argument the message refers to is the argument the user actually passed:
 
-``` r
+```{.r filename="R/model_m3.R" bmm-src="m3" bmm-excerpt="abridged"}
 m3 <- function(resp_cats, num_options, choice_rule = "softmax", version = "custom", ...) {
   call <- match.call()
   stop_missing_args()
@@ -124,7 +124,7 @@ brms checks the first arguments when you build the family: `log_lik` must start 
 
 The contract inside is easy to get wrong in one specific way. `brms::get_dpar(prep, "par", i = i)` returns a **vector with one value per posterior draw**, not a scalar, and your function must return a vector of that same length. The response is a scalar, `prep$data$Y[i]`:
 
-``` r
+```{.r filename="R/model_sdm.R" bmm-src="log_lik_sdm_simple"}
 log_lik_sdm_simple <- function(i, prep) {
   mu <- brms::get_dpar(prep, "mu", i = i)
   c <- brms::get_dpar(prep, "c", i = i)

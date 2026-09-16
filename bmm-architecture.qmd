@@ -6,7 +6,7 @@ Adding a new model is straightforward using the `use_model_template()` function,
 
 The main function for fitting models is `bmm()`. This function is the main entry point for users to fit models. It is set-up to be independent of the specific models that are implemented in the package.
 
-``` r
+```{.r filename="R/bmm.R" bmm-src="bmm"}
 bmm <- function(formula, data, model,
                 prior = NULL,
                 sort_data = getOption("bmm.sort_data", "check"),
@@ -229,13 +229,13 @@ The current model families and their class chains are:
 
 -   `m3` (ss): `c("bmmodel", "m3", "m3_ss")`
 
-Intermediate classes like `"circular"` and `"non_targets"` allow shared `check_data` methods (e.g., `check_data.circular` validates that responses are in radians, `check_data.non_targets` validates non-target feature columns). S3 methods chain via `NextMethod()` from specific to general.
+Intermediate classes like `"circular"` and `"non_targets"` allow shared `check_data` methods (e.g., `check_data.circular` validates that responses are in radians, `check_data.non_targets` validates non-target feature columns). S3 methods chain via `NextMethod()` from general to specific: dispatch walks the class vector left to right, so `check_data.bmmodel` runs first and the model-specific method runs last. See the worked dispatch chain in @sec-example-model.
 
 ## S3 methods
 
 The package uses S3 methods to handle different models. This means that the same function can behave differently depending on the class of the object it is called with. For example, the `configure_model(model, data, formula)` function called by `bmm()`, is generally defined as:
 
-``` r
+```{.r filename="R/helpers-model.R" bmm-src="configure_model"}
 configure_model <- function(model, data, formula) {
    UseMethod('configure_model')
 }
@@ -406,7 +406,7 @@ Some models support multiple versions with different parameter sets. Two pattern
 
 **Version table pattern** (newer, used by EZDM, cswald and M3): Version-specific parameters, links, priors, and init_ranges are stored in a lookup table:
 
-``` r
+```{.r filename="R/model_ezdm.R" bmm-src=".ezdm_version_table" bmm-excerpt="abridged"}
 .ezdm_version_table <- list(
   "3par" = list(
     parameters = list(...),

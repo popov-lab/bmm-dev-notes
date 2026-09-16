@@ -7,11 +7,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: pandoc/latex    # "ubuntu" is a more generic container
-                               # using "pandoc/latex" because of dependencies
-                               # used in the specific "build.sh"
     steps:
       - uses: actions/checkout@v5
+
+      # The book has no executable code chunks, so Quarto uses the markdown
+      # engine and this needs no R and no bmm. tinytex is for the scrreprt PDF.
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          tinytex: true
+
+      - name: Render the book
+        run: quarto render
+
+      # Until this workflow has rendered green at least once, _book/ is still
+      # committed, so a failed render would otherwise push the stale committed
+      # copy and look like a success. Fail loudly instead.
+      - name: Verify the render produced a book
+        run: |
+          test -f _book/index.html || { echo "::error::_book/index.html missing after render"; exit 1; }
+          test -f _book/BMM-Developer-Notes.pdf || { echo "::error::PDF missing after render"; exit 1; }
+          for f in index setup git-workflow bmm-architecture example-model add-new-model coding-conventions; do
+            test -f "_book/$f.html" || { echo "::error::_book/$f.html missing after render"; exit 1; }
+          done
+
       - name: Pushes to another repository
         uses: cpina/github-action-push-to-another-repository@main
         env:

@@ -1,0 +1,66 @@
+name: check-drift
+
+# Verify that the book still describes the bmm release it claims to.
+#
+# This checks against the RELEASED ref, not develop. Checking against develop
+# would leave this repository permanently red whenever unreleased work lands in
+# bmm, which is work that cannot be done here.
+#
+# The load-bearing trigger is the mirror of this check in the bmm repository,
+# which fires in the pull request that breaks the notes while the author still
+# remembers why. This one is the blocking backstop for changes made here.
+#
+# Deliberately not a scheduled cron: GitHub disables scheduled workflows after
+# 60 days of repository inactivity, and this repository went 2026-07-08 to
+# 2026-09-16 without a commit, so a cron would have switched itself off.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "bmm ref to check against (default: the version index.qmd claims)"
+        required: false
+        type: string
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the notes
+        uses: actions/checkout@v5
+
+      - name: Check out bmm
+        uses: actions/checkout@v5
+        with:
+          repository: popov-lab/bmm
+          path: bmm-checkout
+          # Tags are needed: the check resolves the version tag index.qmd names.
+          fetch-depth: 0
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          # The check uses base R only -- no package installation step, and no
+          # bmm install. It reads source text from the checkout, because the
+          # installed bmm may be a fork ahead of any release.
+          use-public-rspm: true
+
+      - name: Run the drift check
+        run: |
+          Rscript tools/check-drift.R \
+            --bmm bmm-checkout \
+            ${{ inputs.ref && format('--ref {0}', inputs.ref) || '' }} \
+            | tee drift.txt
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo '## check-drift'
+            echo '```'
+            cat drift.txt || echo "(no output -- the check did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

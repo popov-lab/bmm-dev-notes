@@ -277,7 +277,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="the-main-workhorse---bmm" class="level2" data-number="3.1">
 <h2 data-number="3.1" class="anchored" data-anchor-id="the-main-workhorse---bmm"><span class="header-section-number">3.1</span> The main workhorse - <code>bmm()</code></h2>
 <p>The main function for fitting models is <code>bmm()</code>. This function is the main entry point for users to fit models. It is set-up to be independent of the specific models that are implemented in the package.</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-label="1"></a>bmm <span class="ot">&lt;-</span> <span class="cf">function</span>(formula, data, model,</span>
+<div class="code-with-filename">
+<div class="code-with-filename-file">
+<pre><strong>R/bmm.R</strong></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1" data-filename="R/bmm.R" data-bmm-src="bmm"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-label="1"></a>bmm <span class="ot">&lt;-</span> <span class="cf">function</span>(formula, data, model,</span>
 <span id="cb1-2"><a href="#cb1-2" aria-label="2"></a>                <span class="at">prior =</span> <span class="cn">NULL</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" aria-label="3"></a>                <span class="at">sort_data =</span> <span class="fu">getOption</span>(<span class="st">"bmm.sort_data"</span>, <span class="st">"check"</span>),</span>
 <span id="cb1-4"><a href="#cb1-4" aria-label="4"></a>                <span class="at">silent =</span> <span class="fu">getOption</span>(<span class="st">"bmm.silent"</span>, <span class="dv">1</span>),</span>
@@ -333,6 +337,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-54"><a href="#cb1-54" aria-label="54"></a>  <span class="co"># save the fitted model object if file argument provided and return the object</span></span>
 <span id="cb1-55"><a href="#cb1-55" aria-label="55"></a>  <span class="fu">try_save_bmmfit</span>(fit, file, <span class="at">compress =</span> file_compress)</span>
 <span id="cb1-56"><a href="#cb1-56" aria-label="56"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 <p>It calls several subroutines, implemented as generic S3 methods, to:</p>
 <ul>
 <li><code>configure_options()</code> - configure local options for fitting, such as parallel sampling</li>
@@ -469,14 +474,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <ul>
 <li><code>m3</code> (ss): <code>c("bmmodel", "m3", "m3_ss")</code></li>
 </ul>
-<p>Intermediate classes like <code>"circular"</code> and <code>"non_targets"</code> allow shared <code>check_data</code> methods (e.g., <code>check_data.circular</code> validates that responses are in radians, <code>check_data.non_targets</code> validates non-target feature columns). S3 methods chain via <code>NextMethod()</code> from specific to general.</p>
+<p>Intermediate classes like <code>"circular"</code> and <code>"non_targets"</code> allow shared <code>check_data</code> methods (e.g., <code>check_data.circular</code> validates that responses are in radians, <code>check_data.non_targets</code> validates non-target feature columns). S3 methods chain via <code>NextMethod()</code> from general to specific: dispatch walks the class vector left to right, so <code>check_data.bmmodel</code> runs first and the model-specific method runs last. See the worked dispatch chain in <a href="example-model.html" class="quarto-xref"><span>Chapter 4</span></a>.</p>
 </section>
 <section id="s3-methods" class="level2" data-number="3.5">
 <h2 data-number="3.5" class="anchored" data-anchor-id="s3-methods"><span class="header-section-number">3.5</span> S3 methods</h2>
 <p>The package uses S3 methods to handle different models. This means that the same function can behave differently depending on the class of the object it is called with. For example, the <code>configure_model(model, data, formula)</code> function called by <code>bmm()</code>, is generally defined as:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-label="1"></a>configure_model <span class="ot">&lt;-</span> <span class="cf">function</span>(model, data, formula) {</span>
+<div class="code-with-filename">
+<div class="code-with-filename-file">
+<pre><strong>R/helpers-model.R</strong></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8" data-filename="R/helpers-model.R" data-bmm-src="configure_model"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-label="1"></a>configure_model <span class="ot">&lt;-</span> <span class="cf">function</span>(model, data, formula) {</span>
 <span id="cb8-2"><a href="#cb8-2" aria-label="2"></a>   <span class="fu">UseMethod</span>(<span class="st">'configure_model'</span>)</span>
 <span id="cb8-3"><a href="#cb8-3" aria-label="3"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 <p>and it will call a function <code>configure_model.modelname()</code> that is specified for each model. The same is true for other functions, such as <code>check_data()</code>, <code>check_formula()</code>, <code>configure_prior()</code>, <code>create_initfun()</code>, and <code>postprocess_brm()</code>. This allows us to add new models without having to edit the main fitting function, <code>bmm()</code>.</p>
 <p>The key S3 generics in the pipeline are:</p>
 <table class="caption-top table">
@@ -657,7 +667,11 @@ Note
 <p>Some models support multiple versions with different parameter sets. Two patterns are used:</p>
 <p><strong>If/else pattern</strong> (older, used by IMM): Version-specific parameters are selected via conditional logic within the model constructor.</p>
 <p><strong>Version table pattern</strong> (newer, used by EZDM, cswald and M3): Version-specific parameters, links, priors, and init_ranges are stored in a lookup table:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-label="1"></a>.ezdm_version_table <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<div class="code-with-filename">
+<div class="code-with-filename-file">
+<pre><strong>R/model_ezdm.R</strong></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15" data-filename="R/model_ezdm.R" data-bmm-src=".ezdm_version_table" data-bmm-excerpt="abridged"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-label="1"></a>.ezdm_version_table <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
 <span id="cb15-2"><a href="#cb15-2" aria-label="2"></a>  <span class="st">"3par"</span> <span class="ot">=</span> <span class="fu">list</span>(</span>
 <span id="cb15-3"><a href="#cb15-3" aria-label="3"></a>    <span class="at">parameters =</span> <span class="fu">list</span>(...),</span>
 <span id="cb15-4"><a href="#cb15-4" aria-label="4"></a>    <span class="at">links =</span> <span class="fu">list</span>(...),</span>
@@ -671,6 +685,7 @@ Note
 <span id="cb15-12"><a href="#cb15-12" aria-label="12"></a>    ...</span>
 <span id="cb15-13"><a href="#cb15-13" aria-label="13"></a>  )</span>
 <span id="cb15-14"><a href="#cb15-14" aria-label="14"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 <p>The model constructor then indexes into this table for each field, selecting the entry for the requested <code>version</code>:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-label="1"></a>parameters <span class="ot">=</span> .ezdm_version_table[[version]][[<span class="st">"parameters"</span>]],</span>
 <span id="cb16-2"><a href="#cb16-2" aria-label="2"></a>links <span class="ot">=</span> .ezdm_version_table[[version]][[<span class="st">"links"</span>]],</span>
