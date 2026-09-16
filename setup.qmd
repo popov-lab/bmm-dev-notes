@@ -8,7 +8,7 @@
 
 2.  [Clone](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) your fork to your local machine
 
-3.  [Create a new branch](https://github.com/Kunena/Kunena-Forum/wiki/Create-a-new-branch-with-git-and-manage-branches) for your model, typically named `feature/name-of-my-model`
+3.  [Create a new branch](https://github.com/Kunena/Kunena-Forum/wiki/Create-a-new-branch-with-git-and-manage-branches) for your model off `develop`. Open an issue first and name the branch after it, as `<issue-number>-short-description` (for example `349-lba-model`). That is what the branches in the main repository look like, and it makes the branch, the issue and the eventual pull request easy to line up.
 
 ## Prerequisites
 
