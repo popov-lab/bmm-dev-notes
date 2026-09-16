@@ -214,11 +214,9 @@ imm <- function(resp_error, nt_features, nt_distances, set_size, regex = FALSE, 
   dots <- list(...)
   if ("setsize" %in% names(dots)) {
     set_size <- dots$setsize
-    warning("The argument 'setsize' is deprecated. Please use 'set_size' instead.")
+    warning2("The argument 'setsize' is deprecated. Please use 'set_size' instead.")
   }
-  if (version == "abc") {
-    nt_distances <- NULL
-  }
+  if (version == "abc") nt_distances <- NULL
   stop_missing_args()
   .model_imm(resp_error = resp_error, nt_features = nt_features,
              nt_distances = nt_distances, set_size = set_size, regex = regex,
@@ -247,17 +245,21 @@ check_data.imm_full <- function(model, data, formula) {
 
 .check_data_imm_dist <- function(model, data, formula) {
   nt_distances <- model$other_vars$nt_distances
-  max_set_size <- attr(data, 'max_set_size')
+  max_set_size <- attr(data, "max_set_size")
 
-  stopif(!isTRUE(all.equal(length(nt_distances), max_set_size - 1)),
-         "The number of columns for non-target distances in the argument \\
-         'nt_distances' should equal max(set_size)-1})")
+  stopif(
+    !isTRUE(all.equal(length(nt_distances), max_set_size - 1)),
+    "The number of columns for non-target distances in the argument \\
+    'nt_distances' should equal max(set_size)-1})"
+  )
 
-  # replace nt_distances
-  data[,nt_distances][is.na(data[,nt_distances])] <- 999
+  # replace NA values with 999 so they have 0 effect through the distance formula
+  data[, nt_distances][is.na(data[, nt_distances])] <- 999
 
-  stopif(any(data[,nt_distances] < 0),
-         "All non-target distances to the target need to be postive.")
+  stopif(
+    any(data[, nt_distances] < 0),
+    "All non-target distances to the target need to be postive."
+  )
   data
 }
 ```
@@ -285,21 +287,34 @@ The configure_model.mymodel() method is where you specify the model formula, the
 ``` r
 configure_model.imm_full <- function(model, data, formula) {
   # retrieve arguments from the data check
-  max_set_size <- attr(data, 'max_set_size')
+  max_set_size <- attr(data, "max_set_size")
   lure_idx <- attr(data, "lure_idx_vars")
   nt_features <- model$other_vars$nt_features
-  set_size_var <- model$other_vars$set_size
   nt_distances <- model$other_vars$nt_distances
 
-  # construct main brms formula from the bmm formula
-  formula <- bmf2bf(model, formula) +
-    brms::lf(kappa2 ~ 1) +
-    brms::lf(mu2 ~ 1) +
+  formula <- .base_imm_formula(model, formula) +
     brms::nlf(theta1 ~ log(exp(c) + exp(a))) +
-    brms::nlf(kappa1 ~ kappa) +
     brms::nlf(expS ~ exp(s))
 
-  # additional internal terms for the mixture model formula
+  theta_exprs <- glue("{lure_idx} * log(exp(c-expS*{nt_distances}) + exp(a)) + (1 - {lure_idx}) * (-100)")
+  formula <- .add_imm_mixture_terms(formula, max_set_size, lure_idx, nt_features, theta_exprs)
+  formula$family <- .imm_mixture_family(max_set_size)
+
+  nlist(formula, data)
+}
+```
+
+The three IMM versions differ only in the `theta` expression and in which extra non-linear terms they add, so everything they share lives in three private helpers at the top of `R/model_imm.R`:
+
+``` r
+.base_imm_formula <- function(model, formula) {
+  bmf2bf(model, formula) +
+    brms::lf(kappa2 ~ 1) +
+    brms::lf(mu2 ~ 1) +
+    brms::nlf(kappa1 ~ kappa)
+}
+
+.add_imm_mixture_terms <- function(formula, max_set_size, lure_idx, nt_features, theta_exprs) {
   kappa_nts <- paste0("kappa", 3:(max_set_size + 1))
   theta_nts <- paste0("theta", 3:(max_set_size + 1))
   mu_nts <- paste0("mu", 3:(max_set_size + 1))
@@ -307,53 +322,51 @@ configure_model.imm_full <- function(model, data, formula) {
   for (i in 1:(max_set_size - 1)) {
     formula <- formula +
       glue_nlf("{kappa_nts[i]} ~ kappa") +
-      glue_nlf("{theta_nts[i]} ~ {lure_idx[i]} * log(exp(c-expS*{nt_distances[i]}) + exp(a))",
-               "+ (1 - {lure_idx[i]}) * (-100)") +
+      glue_nlf("{theta_nts[i]} ~ {theta_exprs[i]}") +
       glue_nlf("{mu_nts[i]} ~ {nt_features[i]}")
   }
 
-  # define mixture family
-  formula$family <- brms::mixture(brms::von_mises("tan_half"),
-                                  brms::von_mises("identity"),
-                                  nmix = c(1, max_set_size),
-                                  order = "none")
+  formula
+}
 
-  nlist(formula, data)
+.imm_mixture_family <- function(max_set_size) {
+  brms::mixture(
+    brms::von_mises("tan_half"), brms::von_mises("identity"),
+    nmix = c(1, max_set_size),
+    order = "none"
+  )
 }
 ```
+
+The version-specific method then builds `theta_exprs` as a glue vector — one expression per non-target position — and hands it to `.add_imm_mixture_terms()`, which loops. `imm_abc` passes `"{lure_idx} * a + (1 - {lure_idx}) * (-100)"`, `imm_full` the distance-weighted expression above. This is the pattern to copy if your model has versions that share a formula skeleton: put the skeleton in a helper prefixed with a dot, and let each version supply only what differs. Note the dot prefix, but not `.model_` — `supported_models()` scans for that prefix and would list your helper as a model.
 
 The configure_model method should always take the arguments `model`, `data`, and `formula` (as a `bmmformula)` and return a named list with the formula (as a `brmsformula`) and the data. The `brmsfamily` should be stored within the formula.
 
 Inside the configure_model method the `brmsformula` is generated using the `bmf2bf` function. This function converts the `bmmformula` passed to `bmm()` function into a `brmsformula` based on the information for the response variables provided in the `bmmmodel` object. There is a general method in `R/bmmformula.R` to construct the formula for all models with a single response variable.
 
 ``` r
-# default method to paste the full brms formula for all bmmodels
+# If no model specific methods exist, it will construct a base brms formula from the first resp_vars
+# We do it this way because most models require just one response variable
 #' @export
-bmf2bf.bmmodel <- function(model, formula) {
-  # check if the model has only one response variable and extract if TRUE
-  brms_formula <- NextMethod("bmf2bf")
-
-  # for each dependent parameter, check if it is used as a non-linear predictor of
-  # another parameter and add the corresponding brms function
-  for (pform in formula) {
-    if (is_nl(pform)) {
-      brms_formula <- brms_formula + brms::nlf(pform)
-    } else {
-      brms_formula <- brms_formula + brms::lf(pform)
-    }
-  }
-  brms_formula
+bmf2bf.bmmodel <- function(model, formula = bmmformula()) {
+  brms_formula <- NextMethod("bmf2bf") %||% brms::bf(glue("{model$resp_vars[[1]]} ~ 1"))
+  components <- lapply(formula, function(x) if (is_nl(x)) brms::nlf(x) else brms::lf(x))
+  Reduce(`+`, components, init = brms_formula)
 }
 
-# paste first line of the brms formula for all bmmodels with 1 response variable
 #' @export
-bmf2bf.default <- function(model, formula){
-  # set base brms formula based on response
-  brms::bf(paste0(model$resp_vars[[1]], "~ 1"))
+bmf2bf.default <- function(model, formula) {
+  NULL
 }
 ```
 
-The `bmf2bf.bmmodel` method initializes the conversion of the `bmmformula` to a `brms_formula`. The first step for this is to paste the first line of a `brmsformula` that includes the response as the dependent variable on the left-hand side. For models with a single response variable this is done in the `bmf2bf.default` method. For models with more than one response variable, you will have to provide a model specific method of `bmf2bf.myModel` to convert the `bmmformula` into the `brmsformula` . This conversion from a `bmmformula` object into a `brmsformula` object is done to avoid users having to specify complicated and long formulas or specifying all additional response information in the `brmsformula` themselves. For more detailed information on the use of additional response information in a `brmsformula` please see the `brmsformula` [documentation](https://rdrr.io/cran/brms/man/brmsformula.html).
+Read the dispatch order carefully here, because it is the reverse of what the names suggest. `bmf2bf()` is called with the model object, whose class vector starts with `"bmmodel"`, so `bmf2bf.bmmodel` runs **first**. Its `NextMethod("bmf2bf")` walks on to the rest of the chain, and only reaches `bmf2bf.default` if no model-specific method intercepted.
+
+That is why `bmf2bf.default` returns `NULL` rather than a formula. It means "nobody claimed the first line". `bmf2bf.bmmodel` sees the `NULL`, falls through the `%||%`, and builds the single-response first line `resp ~ 1` itself. A model with several response variables, or one needing `vreal()`, `vint()` or `trials()`, defines `bmf2bf.mymodel` that returns the first line it wants; `NextMethod()` then returns that instead of `NULL` and the `%||%` fallback never fires.
+
+Once the first line exists, the rest is mechanical: each parameter formula becomes `brms::nlf()` if it is marked non-linear and `brms::lf()` otherwise, and `Reduce()` adds them all to the base formula. Whether a component is marked non-linear is decided in `assign_nl_attr()` (`R/bmmformula.R:375-382`) purely by whether one of its predictors is also a predicted parameter — which is the mechanism behind the name-clash warning described in the next chapter.
+
+This conversion from a `bmmformula` object into a `brmsformula` object is done to avoid users having to specify complicated and long formulas or specifying all additional response information in the `brmsformula` themselves. For more detailed information on the use of additional response information in a `brmsformula` please see the `brmsformula` [documentation](https://rdrr.io/cran/brms/man/brmsformula.html).
 
 ## The Signal Discrimination Model (SDM)
 
@@ -423,9 +436,14 @@ The SDM shares a class with other `circular` models, so most of the data checks 
 check_data.sdm <- function(model, data, formula) {
   # data sorted by predictors is necessary for speedy computation of normalizing constant
   data <- order_data_query(model, data, formula)
+  attr(data, "sdm_run_metadata") <- sdm_run_metadata(data, formula, model)
   NextMethod("check_data")
 }
 ```
+
+This is a compact example of the attribute bridge. Having sorted the data, the method computes where each run of identical predictor values starts and how long it is — the information the Stan likelihood needs to compute its normalizing constant once per run rather than once per row — and hangs the result on the data frame as `sdm_run_metadata`. `configure_model.sdm` reads it back out a few pipeline steps later. The computation itself is a separate function, `sdm_run_metadata()`, and that matters: it is the reason `configure_model.sdm` can recompute the metadata when it is called directly and the attribute is absent.
+
+One detail in that function is worth copying. brms drops rows with missing values in any model variable before fitting, so run boundaries computed on the full data frame would not line up with the rows Stan actually sees. `sdm_run_metadata()` therefore applies `stats::complete.cases()` over the response and predictor columns before computing the runs (`R/model_sdm.R:202-211`). Any index you precompute in `check_data` and pass through to Stan has the same problem.
 
 ### configure_model() methods
 
@@ -434,10 +452,9 @@ The configure_model method for the SDM model is different compared to the IMM mo
 ``` r
 #' @export
 configure_model.sdm <- function(model, data, formula) {
-  # construct the family
   # note - c has a log link, but I've coded it manually for computational efficiency
   sdm_simple <- brms::custom_family(
-    "sdm_simple",
+    name = "sdm_simple",
     dpars = c("mu", "c", "kappa"),
     links = c("tan_half", "identity", "log"),
     lb = c(NA, NA, NA),
@@ -451,9 +468,25 @@ configure_model.sdm <- function(model, data, formula) {
   sc_path <- system.file("stan_chunks", package = "bmm")
   stan_funs <- read_lines2(paste0(sc_path, "/sdm_simple_funs.stan"))
   stan_tdata <- read_lines2(paste0(sc_path, "/sdm_simple_tdata.stan"))
-  stan_likelihood <- read_lines2(paste0(sc_path, "/sdm_simple_likelihood.stan"))
+  likelihood_file <- if (sdm_use_threaded_likelihood()) {
+    "sdm_simple_likelihood_threaded.stan"
+  } else {
+    "sdm_simple_likelihood.stan"
+  }
+  stan_likelihood <- read_lines2(paste0(sc_path, "/", likelihood_file))
+  stan_tdata_pll_args <- if (sdm_use_threaded_likelihood()) {
+    "data matrix COSN"
+  }
+  run_metadata <- attr(data, "sdm_run_metadata")
+  if (is.null(run_metadata)) {
+    # Guard direct configure_model.sdm() calls that bypass check_data.sdm().
+    run_metadata <- sdm_run_metadata(data, formula, model)
+  }
   stanvars <- brms::stanvar(scode = stan_funs, block = "functions") +
-    brms::stanvar(scode = stan_tdata, block = "tdata") +
+    brms::stanvar(scode = stan_tdata, block = "tdata", pll_args = stan_tdata_pll_args) +
+    brms::stanvar(x = run_metadata$G_sdm_runs, name = "G_sdm_runs") +
+    sdm_stanvar_int_array(run_metadata$sdm_run_start, "sdm_run_start", "G_sdm_runs") +
+    sdm_stanvar_int_array(run_metadata$sdm_run_count, "sdm_run_count", "G_sdm_runs") +
     brms::stanvar(scode = stan_likelihood, block = "likelihood", position = "end")
 
   # construct main brms formula from the bmm formula
@@ -467,9 +500,15 @@ configure_model.sdm <- function(model, data, formula) {
 
 Note that `configure_model` no longer returns `init` — initial values are now handled separately by `create_initfun()`, which uses the `init_ranges` defined in the model object.
 
-**Lines 5-14** use the `brms::custom_family` function to define a custom family for the SDM model. The `dpars` argument specifies the parameters of the model, and the `links` argument specifies the link functions for the parameters. For more information, see [here](https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html)
+This is the longest `configure_model` method in the package, so it is worth separating the parts that every custom-family model needs from the parts that are specific to SDM.
 
-**Lines 17-23** read the custom STAN code from the `inst/stan_chunks` directory. This has to be specified with the `system.file()` command to ensure that the code is found when the package is installed. The `stanvars` object is used to pass custom STAN code to the `brms` package. The `stanvars` object is a list of `brms::stanvar` objects, each of which contains the STAN code for a specific part of the model. There is a separate `.stan` file for each part of the STAN code, and each file is read into a separate `brms::stanvar` object.
+Every custom-family model needs the first two. The `brms::custom_family()` call declares the parameters (`dpars`), their link functions, bounds, whether the likelihood is vectorized (`loop = FALSE` here), and the R functions that implement `log_lik` and `posterior_predict`. For more information, see the [brms custom families vignette](https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html). And the Stan code is read from `inst/stan_chunks/` through `system.file()` — not a relative path — so that it is found once the package is installed rather than only when it is loaded from source. Each chunk becomes its own `brms::stanvar()`, tagged with the Stan block it belongs in.
+
+The rest is SDM-specific, and all of it exists to make the normalizing constant cheap. Three things are going on:
+
+-   **Data passed to Stan, not just code.** `brms::stanvar(x = ..., name = ...)` passes an R *value* into the Stan data block. SDM passes the run count and, through the helper `sdm_stanvar_int_array()`, the run start and length arrays computed back in `check_data.sdm`. The helper exists because `stanvar()` would declare an integer array as `vector`, so it overwrites the generated `scode` with `array[G_sdm_runs] int <name>;`.
+-   **Two likelihood chunks.** Which one is read depends on `sdm_use_threaded_likelihood()`. See the threading section of the architecture chapter for why there are two and what `threading(force = TRUE)` does.
+-   **`pll_args`.** Data that the threaded likelihood needs must also be declared in the partial-log-likelihood signature. That is what `pll_args = "data matrix COSN"` on the `tdata` stanvar does, and what `sdm_stanvar_int_array()` sets for the index arrays. Without it the variable is out of scope inside `partial_log_lik` and the model does not compile.
 
 Converting the `bmmformula` to a `brmsformula` and collecting all arguments is done entirely using the `bmf2bf` method.
 
@@ -565,7 +604,7 @@ The DDM uses a defaults table to store parameters, links, priors, and init_range
       name = "Diffusion Decision Model",
       version = "NA",
       citation = glue(
-        "Ratcliff, R. (1978). A theory of memory retrieval. Psychological Review, 85(2), 59-108."
+        "Ratcliff, R. (1978). A theory of memory retrieval. Psychological Review, 85(2), 59-108. https://doi.org/10/fjwm2f;"
       ),
       requirements = glue(
         "- The response time should be in seconds and \\
@@ -808,6 +847,7 @@ configure_model.ezdm_3par <- function(model, data, formula) {
     dpars = c("mu", "drift", "bound", "ndt", "s"),
     links = c("identity", links$drift, links$bound, links$ndt, links$s),
     lb = c(NA, NA, 0, 0, 0),
+    ub = c(NA, NA, NA, NA, NA),
     type = "real",
     log_lik = log_lik_ezdm_3par,
     posterior_predict = posterior_predict_ezdm_3par,

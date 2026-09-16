@@ -217,14 +217,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul>
   <li><a href="#what-use_model_template-does" id="toc-what-use_model_template-does" class="nav-link active" data-scroll-target="#what-use_model_template-does">What <code>use_model_template()</code> does</a></li>
   <li><a href="#example" id="toc-example" class="nav-link" data-scroll-target="#example"><span class="header-section-number">5.1</span> Example</a></li>
-  <li><a href="#testing" id="toc-testing" class="nav-link" data-scroll-target="#testing"><span class="header-section-number">5.2</span> Testing</a>
+  <li><a href="#failure-modes-to-expect" id="toc-failure-modes-to-expect" class="nav-link" data-scroll-target="#failure-modes-to-expect"><span class="header-section-number">5.2</span> Failure modes to expect</a></li>
+  <li><a href="#testing" id="toc-testing" class="nav-link" data-scroll-target="#testing"><span class="header-section-number">5.3</span> Testing</a>
   <ul class="collapse">
-  <li><a href="#parameter-recovery" id="toc-parameter-recovery" class="nav-link" data-scroll-target="#parameter-recovery"><span class="header-section-number">5.2.1</span> Parameter recovery</a></li>
-  <li><a href="#distribution-functions" id="toc-distribution-functions" class="nav-link" data-scroll-target="#distribution-functions"><span class="header-section-number">5.2.2</span> Distribution functions</a></li>
+  <li><a href="#parameter-recovery" id="toc-parameter-recovery" class="nav-link" data-scroll-target="#parameter-recovery"><span class="header-section-number">5.3.1</span> Parameter recovery</a></li>
+  <li><a href="#distribution-functions" id="toc-distribution-functions" class="nav-link" data-scroll-target="#distribution-functions"><span class="header-section-number">5.3.2</span> Distribution functions</a></li>
   </ul></li>
-  <li><a href="#post-processing-infrastructure" id="toc-post-processing-infrastructure" class="nav-link" data-scroll-target="#post-processing-infrastructure"><span class="header-section-number">5.3</span> Post-processing infrastructure</a></li>
-  <li><a href="#add-an-example-dataset" id="toc-add-an-example-dataset" class="nav-link" data-scroll-target="#add-an-example-dataset"><span class="header-section-number">5.4</span> Add an example dataset</a></li>
-  <li><a href="#add-an-article" id="toc-add-an-article" class="nav-link" data-scroll-target="#add-an-article"><span class="header-section-number">5.5</span> Add an article</a></li>
+  <li><a href="#post-processing-infrastructure" id="toc-post-processing-infrastructure" class="nav-link" data-scroll-target="#post-processing-infrastructure"><span class="header-section-number">5.4</span> Post-processing infrastructure</a></li>
+  <li><a href="#add-an-example-dataset" id="toc-add-an-example-dataset" class="nav-link" data-scroll-target="#add-an-example-dataset"><span class="header-section-number">5.5</span> Add an example dataset</a></li>
+  <li><a href="#add-an-article" id="toc-add-an-article" class="nav-link" data-scroll-target="#add-an-article"><span class="header-section-number">5.6</span> Add an article</a></li>
   </ul>
 </nav>
     </div>
@@ -472,8 +473,17 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><p><strong>Define <code>log_lik</code> and <code>posterior_predict</code> functions</strong> if your model uses a custom family. These R functions must be passed to <code>brms::custom_family()</code> and enable posterior predictive checks, model comparison (via LOO/WAIC), and <code>posterior_predict()</code>. They should use the <code>d*()</code> and <code>r*()</code> distribution functions from <code>R/distributions.R</code>. See the DDM example in <a href="example-model.html" class="quarto-xref">Section&nbsp;<span>4</span></a>.</p></li>
 </ol>
 </section>
-<section id="testing" class="level2" data-number="5.2">
-<h2 data-number="5.2" class="anchored" data-anchor-id="testing"><span class="header-section-number">5.2</span> Testing</h2>
+<section id="failure-modes-to-expect" class="level2" data-number="5.2">
+<h2 data-number="5.2" class="anchored" data-anchor-id="failure-modes-to-expect"><span class="header-section-number">5.2</span> Failure modes to expect</h2>
+<p>Five things in 1.3.2 will bite you while the model is still half-written. All of them are new or newly strict, so an older model file will not warn you about them.</p>
+<p><strong><code>configure_prior()</code> errors if <code>fixed_parameters</code> names a parameter the formula never gets.</strong> Every name in <code>fixed_parameters</code> has to be wired into the formula by your <code>configure_model()</code>, as either a distributional parameter or a non-linear one. If it is neither, bmm stops with a model-definition error rather than letting a malformed <code>b_Intercept ~ constant()</code> prior reach <code>brm()</code> (#377, <code>R/helpers-prior.R:165-174</code>). This is the error you get when you add <code>mu = 0</code> to <code>fixed_parameters</code> but forget to put a dummy <code>mu</code> in the family’s <code>dpars</code>.</p>
+<p><strong>Short parameter names are risky, and the rule is a word boundary.</strong> <code>create_initfun()</code> has to map Stan parameter names back to your model parameters to know which <code>init_ranges</code> entry applies. It matches with the regex <code>(^|_)param(_|$)</code> and takes the longest match when several apply (#354, #355, <code>R/helpers-inits.R:75-87</code>). So a parameter called <code>s</code> matches <code>b_s_Intercept</code> but not <code>sd_id__sim</code>, which is the point — before 1.3.2 this was a substring match and <code>s</code> collided with <code>sim</code>. Two consequences for naming: a parameter name that is a substring of another is now safe, but a name that appears as a whole underscore-delimited token somewhere else in the Stan parameter names is not. If nothing matches at all, the fallback is the first underscore-delimited token of the Stan name, which is usually wrong and silently so.</p>
+<p><strong>A parameter that is not a dpar is looked up in <code>nlpars</code>.</strong> <code>create_initfun()</code> resolves each parameter’s terms as <code>bterms$dpars[[parameter]] %||% bterms$nlpars[[parameter]]</code> (<code>R/helpers-inits.R:56</code>). Before #362 it only looked in <code>dpars</code>, and a model built as a non-linear brms formula — a native-multinomial model, for instance — failed with <code>no applicable method for 'has_intercept' applied to an object of class "NULL"</code>. If you see that error on an older bmm, this is what it was.</p>
+<p><strong>A predictor that is also a parameter name and also a data column now warns.</strong> bmm decides whether a formula component is non-linear purely by whether one of its predictors is also a predicted parameter, and emits <code>nlf()</code> rather than <code>lf()</code> in that case. When the same name is also a column in the data, that choice changes the likelihood and the user has no way to see it. <code>check_formula.bmmodel</code> warns (#378, <code>R/bmmformula.R:165-180</code>). Short parameter names collide naturally with column names like <code>accuracy</code> or a condition coded <code>c</code>, which is another reason to avoid one-letter parameters in a new model.</p>
+<p><strong>Add your model to <code>response_annotations()</code>.</strong> Since #392, <code>print.bmmodel()</code> shows the required response variables with the coding they expect (“radians in [-pi, pi]”, “seconds”) and the default links, which answers “what does my data frame need to look like?” at the console. The annotations come from <code>response_annotations()</code> (<code>R/helpers-model.R:184-205</code>), a lookup keyed on the model’s class. A model whose class is not in that chain falls through to an empty list and prints its response variables bare. Add a branch for your class.</p>
+</section>
+<section id="testing" class="level2" data-number="5.3">
+<h2 data-number="5.3" class="anchored" data-anchor-id="testing"><span class="header-section-number">5.3</span> Testing</h2>
 <p>Unit testing is extremely important. You should test your model with the <code>testthat</code> package. You can use the <code>use_test()</code> function to create a test file for your model. See files like <code>tests/testthat/test-model_ddm.R</code> or <code>tests/testthat/test-model_cswald.R</code> for examples of how we test models. BRMS models take a long time to fit, so we don’t test the actual fitting process.</p>
 <p>Instead we use brms’ mock backend. This is not a bmm feature — <code>backend = "mock"</code> and <code>mock_fit</code> are arguments of <code>brms::brm()</code>, and they reach it because <code>bmm()</code> passes <code>...</code> through. The whole backend is two lines: whatever you pass as <code>mock_fit</code> is returned in place of the fitted Stan object (a function is called first). Everything before the fit — data checks, formula translation, family construction, stanvars, initial values — runs for real, which is exactly what you want to test. For example, here’s a mock test pattern:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-label="1"></a><span class="fu">test_that</span>(<span class="st">"gcm model runs without errors"</span>, {</span>
@@ -496,12 +506,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb4-18"><a href="#cb4-18" aria-label="18"></a>})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Two things about that call are easy to get wrong. The alias generated by the template calls <code>stop_missing_args()</code>, so every argument without a default has to be supplied — a test that passes only the response variable errors before it reaches the pipeline. And the argument is <code>mock_fit</code>, not <code>mock</code>. You will see <code>mock = 1</code> in the existing test files (48 occurrences against 21 of <code>mock_fit = 1</code> in 1.3.2); it works only because R partial-matches it to <code>mock_fit</code> on the way through <code>...</code>. Write <code>mock_fit</code>.</p>
 <p>The tests based on the <code>testthat</code> package are run every time you call the <code>check()</code> command. Before you submit your changes, make sure that all tests pass.</p>
-<section id="parameter-recovery" class="level3" data-number="5.2.1">
-<h3 data-number="5.2.1" class="anchored" data-anchor-id="parameter-recovery"><span class="header-section-number">5.2.1</span> Parameter recovery</h3>
+<section id="parameter-recovery" class="level3" data-number="5.3.1">
+<h3 data-number="5.3.1" class="anchored" data-anchor-id="parameter-recovery"><span class="header-section-number">5.3.1</span> Parameter recovery</h3>
 <p>Additionally, you should perform a full test of the model by running it in a separate script and ensuring it gives meaningful results. Create a parameter recovery script at <code>local/&lt;model_name&gt;_parameter_recovery.R</code>. At the very least, you should perform basic parameter recovery simulations for hyper-parameters (i.e., means and standard deviations) as well as subject-level parameters to give users an idea of how much data they need to adequately estimate the model.</p>
 </section>
-<section id="distribution-functions" class="level3" data-number="5.2.2">
-<h3 data-number="5.2.2" class="anchored" data-anchor-id="distribution-functions"><span class="header-section-number">5.2.2</span> Distribution functions</h3>
+<section id="distribution-functions" class="level3" data-number="5.3.2">
+<h3 data-number="5.3.2" class="anchored" data-anchor-id="distribution-functions"><span class="header-section-number">5.3.2</span> Distribution functions</h3>
 <p>If your model uses a custom family, you should also add distribution functions (<code>d*</code>, <code>r*</code>, and optionally <code>p*</code>, <code>q*</code>) to <code>R/distributions.R</code>. These are used for:</p>
 <ul>
 <li>Data simulation (useful for parameter recovery and examples)</li>
@@ -510,8 +520,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ul>
 </section>
 </section>
-<section id="post-processing-infrastructure" class="level2" data-number="5.3">
-<h2 data-number="5.3" class="anchored" data-anchor-id="post-processing-infrastructure"><span class="header-section-number">5.3</span> Post-processing infrastructure</h2>
+<section id="post-processing-infrastructure" class="level2" data-number="5.4">
+<h2 data-number="5.4" class="anchored" data-anchor-id="post-processing-infrastructure"><span class="header-section-number">5.4</span> Post-processing infrastructure</h2>
 <p>The bmm package provides several post-processing tools that work automatically for most models:</p>
 <ul>
 <li><strong><code>conditional_effects()</code></strong> — visualize marginal effects of predictors on model parameters. Works automatically via the bmmfit class.</li>
@@ -520,8 +530,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ul>
 <p>For these to work with your custom family, you need to have defined <code>log_lik</code> and <code>posterior_predict</code> functions and passed them to <code>brms::custom_family()</code>. No additional code is typically needed in your model file.</p>
 </section>
-<section id="add-an-example-dataset" class="level2" data-number="5.4">
-<h2 data-number="5.4" class="anchored" data-anchor-id="add-an-example-dataset"><span class="header-section-number">5.4</span> Add an example dataset</h2>
+<section id="add-an-example-dataset" class="level2" data-number="5.5">
+<h2 data-number="5.5" class="anchored" data-anchor-id="add-an-example-dataset"><span class="header-section-number">5.5</span> Add an example dataset</h2>
 <p>All new models should come with an example dataset, that can be loaded by users and can be used in the examples section. This should be either:</p>
 <ul>
 <li>A new dataset that you add to the package</li>
@@ -530,8 +540,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ul>
 <p>For example, the vignettes for the <code>mixture2p</code> and <code>mixture3p</code> use an external dataset from the <code>mixtur</code> package that can be loaded with <code>data('bays2009_full', package='mixtur')</code>. The <code>IMM</code> models use a dataset included in the current package. For instructions on how to add a new dataset see <a href="https://r-pkgs.org/data.html">here</a>.</p>
 </section>
-<section id="add-an-article" class="level2" data-number="5.5">
-<h2 data-number="5.5" class="anchored" data-anchor-id="add-an-article"><span class="header-section-number">5.5</span> Add an article</h2>
+<section id="add-an-article" class="level2" data-number="5.6">
+<h2 data-number="5.6" class="anchored" data-anchor-id="add-an-article"><span class="header-section-number">5.6</span> Add an article</h2>
 <p>All new models should come with an article that explains some basic information about the model and how to estimate it with <code>bmm</code>. You can use the <code>use_article()</code> function to create a new article. See <a href="https://r-pkgs.org/vignettes.html">here</a> for more information. The articles will be published automatically on the package website under “Articles” when the pull request is approved. You can browse the source code for the existing articles in the <code>vignettes/articles/</code> directory. You can see the published version of the existing vignettes <a href="../articles/">here</a>.</p>
 <p>And that’s it! You have added a new model to the <code>bmm</code> package. You can now submit your changes to the <code>bmm</code> package repository.</p>
 

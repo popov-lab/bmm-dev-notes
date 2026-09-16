@@ -249,6 +249,20 @@ Now you have to:
 
 8.  **Define `log_lik` and `posterior_predict` functions** if your model uses a custom family. These R functions must be passed to `brms::custom_family()` and enable posterior predictive checks, model comparison (via LOO/WAIC), and `posterior_predict()`. They should use the `d*()` and `r*()` distribution functions from `R/distributions.R`. See the DDM example in [Section @sec-example-model].
 
+## Failure modes to expect
+
+Five things in 1.3.2 will bite you while the model is still half-written. All of them are new or newly strict, so an older model file will not warn you about them.
+
+**`configure_prior()` errors if `fixed_parameters` names a parameter the formula never gets.** Every name in `fixed_parameters` has to be wired into the formula by your `configure_model()`, as either a distributional parameter or a non-linear one. If it is neither, bmm stops with a model-definition error rather than letting a malformed `b_Intercept ~ constant()` prior reach `brm()` (#377, `R/helpers-prior.R:165-174`). This is the error you get when you add `mu = 0` to `fixed_parameters` but forget to put a dummy `mu` in the family's `dpars`.
+
+**Short parameter names are risky, and the rule is a word boundary.** `create_initfun()` has to map Stan parameter names back to your model parameters to know which `init_ranges` entry applies. It matches with the regex `(^|_)param(_|$)` and takes the longest match when several apply (#354, #355, `R/helpers-inits.R:75-87`). So a parameter called `s` matches `b_s_Intercept` but not `sd_id__sim`, which is the point — before 1.3.2 this was a substring match and `s` collided with `sim`. Two consequences for naming: a parameter name that is a substring of another is now safe, but a name that appears as a whole underscore-delimited token somewhere else in the Stan parameter names is not. If nothing matches at all, the fallback is the first underscore-delimited token of the Stan name, which is usually wrong and silently so.
+
+**A parameter that is not a dpar is looked up in `nlpars`.** `create_initfun()` resolves each parameter's terms as `bterms$dpars[[parameter]] %||% bterms$nlpars[[parameter]]` (`R/helpers-inits.R:56`). Before #362 it only looked in `dpars`, and a model built as a non-linear brms formula — a native-multinomial model, for instance — failed with `no applicable method for 'has_intercept' applied to an object of class "NULL"`. If you see that error on an older bmm, this is what it was.
+
+**A predictor that is also a parameter name and also a data column now warns.** bmm decides whether a formula component is non-linear purely by whether one of its predictors is also a predicted parameter, and emits `nlf()` rather than `lf()` in that case. When the same name is also a column in the data, that choice changes the likelihood and the user has no way to see it. `check_formula.bmmodel` warns (#378, `R/bmmformula.R:165-180`). Short parameter names collide naturally with column names like `accuracy` or a condition coded `c`, which is another reason to avoid one-letter parameters in a new model.
+
+**Add your model to `response_annotations()`.** Since #392, `print.bmmodel()` shows the required response variables with the coding they expect ("radians in [-pi, pi]", "seconds") and the default links, which answers "what does my data frame need to look like?" at the console. The annotations come from `response_annotations()` (`R/helpers-model.R:184-205`), a lookup keyed on the model's class. A model whose class is not in that chain falls through to an empty list and prints its response variables bare. Add a branch for your class.
+
 ## Testing
 
 Unit testing is extremely important. You should test your model with the `testthat` package. You can use the `use_test()` function to create a test file for your model. See files like `tests/testthat/test-model_ddm.R` or `tests/testthat/test-model_cswald.R` for examples of how we test models. BRMS models take a long time to fit, so we don't test the actual fitting process.
