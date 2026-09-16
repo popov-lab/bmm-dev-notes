@@ -6,13 +6,14 @@ name: check-drift
 # would leave this repository permanently red whenever unreleased work lands in
 # bmm, which is work that cannot be done here.
 #
-# The load-bearing trigger is the mirror of this check in the bmm repository,
-# which fires in the pull request that breaks the notes while the author still
-# remembers why. This one is the blocking backstop for changes made here.
+# A mirror of this check in the bmm repository would be the load-bearing
+# trigger, firing in the pull request that breaks the notes while the author
+# still remembers why. That is not set up yet; this one is the backstop, and it
+# blocks changes made here.
 #
 # Deliberately not a scheduled cron: GitHub disables scheduled workflows after
-# 60 days of repository inactivity, and this repository went 2026-07-08 to
-# 2026-09-16 without a commit, so a cron would have switched itself off.
+# 60 days without repository activity, and this repository goes quiet for
+# longer than that between rounds of work, so a cron would switch itself off.
 
 on:
   push:
@@ -44,8 +45,8 @@ jobs:
       - uses: r-lib/actions/setup-r@v2
         with:
           # The check uses base R only -- no package installation step, and no
-          # bmm install. It reads source text from the checkout, because the
-          # installed bmm may be a fork ahead of any release.
+          # bmm install. It reads source text from the checkout, because an
+          # installed bmm may be ahead of the released tag.
           use-public-rspm: true
 
       - name: Run the drift check

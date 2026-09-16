@@ -11,7 +11,9 @@ The contents of the `_book` directory contain the rendered website, and they are
 
 ## Keeping the notes in sync with bmm
 
-The chapters teach by quoting bmm's own source, so they go stale when bmm changes. `tools/check-drift.R` catches that. It needs base R only — no packages, and **not** an installed bmm, because the bmm in your library may be a personal fork ahead of any release.
+The chapters teach by quoting bmm's own source, so they go stale when bmm changes. `tools/check-drift.R` catches that. It needs base R only — no packages, and **not** an installed bmm, because the bmm in your library may be ahead of the released tag.
+
+Run it from the root of this repository; it resolves paths relative to the working directory.
 
 ```bash
 Rscript tools/check-drift.R                  # bmm at ../bmm, at the version index.qmd claims
@@ -20,7 +22,7 @@ Rscript tools/check-drift.R --ref develop    # check against an unreleased ref
 Rscript tools/check-drift.R --ref WORKTREE   # check the checkout as it stands
 ```
 
-By default it reads the version the book claims out of `index.qmd` and checks against that tag, so this repository is not permanently red on unreleased work in bmm.
+It needs a bmm git checkout to read. `../bmm` is only the default; point it elsewhere with `--bmm`, or set `BMM_DIR` in the environment if your checkouts are not siblings. By default it reads the version the book claims out of `index.qmd` and checks against that tag, so this repository is not permanently red on unreleased work in bmm.
 
 Every fenced R block that quotes bmm carries its source:
 
@@ -37,6 +39,6 @@ Two things the checker will not do: it will not skip an anchor it cannot resolve
 ### Where the check runs
 
 - **In this repository** (`.github/workflows/check-drift.yml`): blocking, on push and pull request, against the released ref.
-- **In bmm**: the same script should run on pull requests touching `R/**`, non-blocking, reporting to the step summary. That is the load-bearing trigger, because it fires in the pull request that breaks the notes while the author still remembers why. It is not set up yet — see the open follow-up.
+- **In bmm**: not set up. The same script running there on pull requests touching `R/**`, non-blocking and reporting to the step summary, would be the load-bearing trigger, because it would fire in the pull request that breaks the notes while the author still remembers why. Until that exists, drift is caught here, one commit later.
 
-There is deliberately no scheduled cron. GitHub disables scheduled workflows after 60 days of repository inactivity, and this repository went 2026-07-08 to 2026-09-16 without a commit, so a cron would have switched itself off.
+There is deliberately no scheduled cron. GitHub disables scheduled workflows after 60 days without repository activity, and this repository goes quiet for longer than that between rounds of work, so a cron would switch itself off.

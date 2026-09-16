@@ -18,8 +18,8 @@
 # rename is how grep-based checkers stop working without anyone noticing.
 #
 # Requires only base R. It reads a bmm git checkout's source text and never
-# loads or installs the package, because the installed bmm may be a personal
-# fork ahead of any release.
+# loads or installs the package, because an installed bmm may be ahead of the
+# released tag.
 #
 # Usage:
 #   Rscript tools/check-drift.R                     # bmm at ../bmm, ref from index.qmd
