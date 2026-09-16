@@ -3,9 +3,7 @@ name: CI
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,16 +11,16 @@ jobs:
                                # using "pandoc/latex" because of dependencies
                                # used in the specific "build.sh"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Pushes to another repository
         uses: cpina/github-action-push-to-another-repository@main
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         with:
           source-directory: '_book'
-          destination-github-username: 'venpopov'
+          destination-github-username: 'popov-lab'
           destination-repository-name: 'bmm'
-          user-email: vencislav.popov@gmail.com
+          user-email: 17825471+GidonFrischkorn@users.noreply.github.com
           target-branch: gh-pages
           target-directory: dev/dev-notes
       - name: Pushes to another repository (2)
@@ -31,8 +29,8 @@ jobs:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         with:
           source-directory: '_book'
-          destination-github-username: 'venpopov'
+          destination-github-username: 'popov-lab'
           destination-repository-name: 'bmm'
-          user-email: vencislav.popov@gmail.com
+          user-email: 17825471+GidonFrischkorn@users.noreply.github.com
           target-branch: gh-pages
           target-directory: dev-notes
