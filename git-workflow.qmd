@@ -31,3 +31,25 @@ You can (and should) repeat this process as many times as you need to before sub
 ## Pull requests
 
 When you are ready you can open a pull request from your forked repository to the main bmm repository. You can do this from the github website. Make sure to select the Develop branch as the base branch and your feature branch as the compare branch. You should add a detailed description of your changes, including the motivation for the changes and any relevant context. You should also mention any issues that your pull request resolves.
+
+## AI-assisted contributions
+
+AI assistance is welcome. The maintainers use it. This section is not a warning against it, but a statement of what we need from you so that a pull request written with help from a language model can be reviewed like any other.
+
+**You are the author of every line you submit.** Concretely, that means three things. You can explain what each function does and why it is written the way it is. You have run it — a real fit on real or simulated data, not only the test suite. And you answer for it in review, including the parts you did not type yourself.
+
+**Say in the pull request body which parts were AI-assisted and how you verified them.** This is not a disclaimer and it does not count against you. It tells the reviewer where to look hardest, which makes the review faster and better, and it is the difference between a reviewer trusting the rest of the diff and checking all of it twice.
+
+**What the review does with it.** An automated AI functionality review runs on every pull request as a required status check. It reads the diff and reports what it thinks the code does. It never counts as an approval. A human approves, and for a new model that human has installed your branch and fitted the model.
+
+### What review will send back
+
+AI-generated code in bmm fails in recognizable ways. These are the ones that come up, and they are all cheap to fix before you open the pull request rather than after:
+
+-   **Defensive validation sprinkled through internals.** A model generated with help tends to acquire argument checks in `.model_*()`, in `configure_model.*()` and in every private helper. Validation belongs in the exported constructor, because that is the only place where the argument named in the message is the argument the user passed. See @sec-conventions.
+-   **Base `stop()`, `warning()` and `sprintf()`.** These are what a model trained on general R code reaches for. bmm uses `stop2()`, `warning2()`, `stopif()`, `warnif()` and `glue::glue()`, and the reasons are not stylistic: `message2()` respects `options(bmm.silent)` and `stopif()` interpolates in the caller's frame.
+-   **Explicit `return()` on the last line**, and `%>%` where the package uses `|>`.
+-   **Comments that restate the code.** `# construct the family` above a `custom_family()` call is noise. A comment should record why a line is the way it is, especially when it looks removable and is not.
+-   **A parameter recovery script that simulates and fits with the same function.** This is the one that matters most, because it produces a result that looks like evidence. If you generate data with your own `r*()` function and fit a likelihood built from your own `d*()` function, any error common to both cancels and recovery looks clean whether the model is right or wrong. Use an independent generator.
+
+The last one is worth the extra sentence: a recovery study that cannot fail tells the reviewer nothing, and it is the artifact they will ask for first.
