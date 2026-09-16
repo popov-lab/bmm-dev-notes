@@ -1,40 +1,22 @@
-## Adding a new model
+# Adding a new model
 
 If you have read [Section @sec-bmm-architecture] and [Section @sec-example-model], you should have a pretty good idea of how the `bmm` package functions. Now it's time to add your new model.
 
-The good news are, you don't have to add any of the files manually. The `bmm` package includes a function `use_model_template()` that generates all the files with templates for all necessary functions. Thus, you can focus on the important work of filling these templates with the relevant information without worrying about missing something critical. If you type `?use_model_template` you will see the following description:
+The good news are, you don't have to add any of the files manually. The `bmm` package includes a function `use_model_template()` that generates all the files with templates for all necessary functions. Thus, you can focus on the important work of filling these templates with the relevant information without worrying about missing something critical.
 
-### Function `use_model_template()` {.unnumbered}
+## What `use_model_template()` does {.unnumbered}
 
-#### Description {.unnumbered}
+Run it from the root of the package. It writes `R/model_<model_name>.R` containing the parameter specification, the model constructor, the user-facing alias, and stub methods for `check_data`, `bmf2bf`, `configure_model` and `postprocess_brm`. With `custom_family = TRUE` it also creates one empty `inst/stan_chunks/<model_name>_<block>.stan` file per entry in `stanvar_blocks`, and wires the code that reads them into `configure_model`.
 
-Create a file with a template for adding a new model (for developers)
+The full argument list is on the [reference page for `use_model_template()`](../reference/use_model_template.html), which is generated from the function itself and is therefore never out of date. Four things about it are worth knowing before you call it:
 
-#### Usage {.unnumbered}
+-   **`versions` is the second positional argument.** `use_model_template("gcm", TRUE)` means `versions = TRUE`, not `custom_family = TRUE`. Name the arguments.
 
-``` r
-use_model_template(
-  model_name,
-  versions = NULL,
-  custom_family = FALSE,
-  stanvar_blocks = c("data", "tdata", "parameters",
-                     "tparameters", "model", "likelihood",
-                     "genquant", "functions"),
-  open_files = TRUE,
-  testing = FALSE
-)
-```
+-   **The stan files are created before the R file is written.** If the call fails partway through, empty `.stan` files are already on disk and you have to remove them by hand before you can call the function again.
 
-#### Arguments {.unnumbered}
+-   **An unversioned model gets `version = "NA"`** — the literal string, not `NA`. That is what `print()` and the generated documentation will show unless you pass `versions`.
 
-| Argument | Description |
-|-----------------------|-------------------------------------------------|
-| `model_name` | A string with the name of the model. The file will be named bmm_model_model_name.R and all necessary functions will be created with the appropriate names and structure. The file will be saved in the ⁠R/⁠ directory |
-| `versions` | An optional character vector naming the model versions. If `NULL` (default), the template generates a flat `.{model_name}_defaults` specification (like ddm). If supplied, it generates a `.{model_name}_version_table` with one entry per version and a versioned alias validated with `match.arg()` (like cswald). |
-| `custom_family` | Logical; Do you plan to define a brms::custom_family()? If TRUE the function will add a section for the custom family, placeholders for the stan_vars and corresponding empty .stan files in ⁠inst/stan_chunks/⁠, that you can fill For an example, see the sdmSimple model in ⁠/R/bmm_model_sdmSimple.R⁠. If FALSE (default) the function will not add the custom family section nor stan files. |
-| `stanvar_blocks` | A character vector with the names of the blocks that will be added to the custom family section. See brms::stanvar() for more details. The default lists all the possible blocks, but it is unlikely that you will need all of them. You can specify a vector of only those that you need. The function will add a section for each block in the list |
-| `open_files` | Logical; If TRUE (default), the function will open the template files that were created in RStudio |
-| `testing` | Logical; If TRUE, the function will return the file content but will not save the file. If FALSE (default), the function will save the file |
+-   **The template does not generate everything you may need.** There are no stubs for `check_formula()`, `configure_prior()` or `create_initfun()`; add those yourself only if your model needs them. The generated alias also omits the `@keywords bmmodel` tag, which the package's pkgdown test expects on a user-facing model alias — add it (see the coding conventions chapter).
 
 ## Example
 
@@ -46,7 +28,7 @@ First you set up your system and git environment as described in [Section @sec-s
 use_model_template("gcm", custom_family = TRUE, stanvar_blocks = c("likelihood", "functions"))
 ```
 
-This will create the file `bmm_model_gcm.R` in the `R/` directory and the files `gcm_likelihood.stan` and `gcm_functions.stan` in the `inst/stan_chunks/` directory. The function will also open the files in RStudio. You will see the following output in the console:
+This will create the file `model_gcm.R` in the `R/` directory and the files `gcm_likelihood.stan` and `gcm_functions.stan` in the `inst/stan_chunks/` directory. The function will also open the files in RStudio. You will see the following output in the console:
 
 ```         
 • Modify 'inst/stan_chunks/gcm_likelihood.stan'
@@ -112,7 +94,7 @@ Now you can fill the files with the appropriate code. The Stan files will be emp
 # user facing alias
 # information in the title and details sections will be filled in
 # automatically based on the information in the .model_gcm()$info
- 
+
 #' @title `r .model_gcm()$name`
 #' @name gcm
 #' @details `r model_info(.model_gcm())`
@@ -136,7 +118,6 @@ gcm <- function(resp_var1, required_arg1, required_arg2, links = NULL, ...) {
    .model_gcm(resp_var1 = resp_var1, required_arg1 = required_arg1, required_arg2 = required_arg2,
                 links = links, call = call, ...)
 }
-
 
 #############################################################################!
 # CHECK_DATA S3 methods                                                  ####
@@ -162,11 +143,10 @@ check_data.gcm <- function(model, data, formula) {
    NextMethod('check_data')
 }
 
-
 #############################################################################!
 # Convert bmmformula to brmsformla methods                               ####
 #############################################################################!
-# A bmf2bf.* function should be defined if the default method for consructing
+# A bmf2bf.* function should be defined if the default method for constructing
 # the brmsformula from the bmmformula does not apply (e.g if aterms are required).
 # The shared method for all `bmmodels` is defined in bmmformula.R.
 # See ?bmf2bf for details.
@@ -178,13 +158,12 @@ bmf2bf.gcm <- function(model, formula) {
    resp_var1 <- model$resp_vars$resp_var1
    resp_var2 <- model$resp_vars$resp_arg2
 
-   # set the base brmsformula based 
-   brms_formula <- brms::bf(paste0(resp_var1," | ", vreal(resp_var2), " ~ 1" ),)
+   # set the base brmsformula based
+   brms_formula <- brms::bf(paste0(resp_var1, " | ", vreal(resp_var2), " ~ 1"))
 
    # return the brms_formula to add the remaining bmmformulas to it.
    brms_formula
 }
-
 
 #############################################################################!
 # CONFIGURE_MODEL S3 METHODS                                             ####
@@ -204,7 +183,7 @@ configure_model.gcm <- function(model, data, formula) {
    # construct brms formula from the bmm formula
    formula <- bmf2bf(model, formula)
 
-   # construct the family & add to formula object 
+   # construct the family & add to formula object
    gcm_family <- brms::custom_family(
      'gcm',
      dpars = c(),
@@ -227,12 +206,10 @@ configure_model.gcm <- function(model, data, formula) {
    # return the list
    nlist(formula, data, stanvars)
 }
-
-
 #############################################################################!
 # POSTPROCESS METHODS                                                    ####
 #############################################################################!
-# A postprocess_brm.* function should be defined for the model class. See 
+# A postprocess_brm.* function should be defined for the model class. See
 # ?postprocess_brm for details
 
 #' @export
@@ -246,7 +223,9 @@ Now you have to:
 
 1.  **Fill the `.gcm_defaults` specification and the `.model_gcm` constructor.** Most of your work is in `.gcm_defaults`: specify the model's parameters (with descriptions), their link functions, which parameters are fixed (and to what value), the default priors, and the initialization ranges. It's crucial that you set default priors for every parameter, informed by knowledge in the field — see `.ddm_defaults` in `model_ddm.R` for a worked example. In `.model_gcm()`, rename the response and required arguments (or delete the extras if you have none) and fill in the metadata (`domain`, `task`, `name`, `citation`, `requirements`). The constructor lists every field of the model object inline and reads the parameter specification from `.gcm_defaults`; its class must be `c('bmmodel', 'gcm')`.
 
-    If your model has multiple versions with different parameter sets, generate the scaffold with `use_model_template("gcm", versions = c("v1", "v2"))`. This produces a `.gcm_version_table` with one entry per version, a `version` argument validated with `match.arg()`, and a constructor that passes `spec = .gcm_version_table[[version]]` — instead of the flat `.gcm_defaults`.
+    If your model has multiple versions with different parameter sets, generate the scaffold with `use_model_template("gcm", versions = c("v1", "v2"))`. Instead of the flat `.gcm_defaults`, this produces a `.gcm_version_table` with one entry per version; a constructor that reads each field out of it (`parameters = .gcm_version_table[[version]][["parameters"]]`, and so on) and appends `paste0("gcm_", version)` to the class vector; and an alias whose `version` argument is validated with `match.arg()`.
+
+    The released versioned models do not all validate `version` this way, so do not read one of them as the norm. `cswald()` uses `match.arg()` as the template does (`R/model_cswald.R:177`), `m3()` checks the string with `stopif()` (`R/model_m3.R:183-186`), and `ezdm()` does not validate in the constructor at all — an unknown version reaches `check_data.ezdm()` and errors there (`R/model_ezdm.R:200`). Use the template's `match.arg()` for a new model: it rejects the bad value where the user typed it.
 
 2.  **Adjust the user-facing alias.** Here you should only rename the required arguments and fill in the `@examples` section with a full example. Everything else will be filled in automatically based on the information in the `.model_gcm` function.
 
@@ -272,7 +251,9 @@ Now you have to:
 
 ## Testing
 
-Unit testing is extremely important. You should test your model with the `testthat` package. You can use the `use_test()` function to create a test file for your model. See files like `tests/testthat/test-model_ddm.R` or `tests/testthat/test-model_cswald.R` for examples of how we test models. BRMS models take a long time to fit, so we don't test the actual fitting process. The `bmm()` function provides an argument `backend="mock"`, which will return a mock object instead of fitting the model. This ensures that the entire pipeline works without errors. For example, here's a mock test pattern:
+Unit testing is extremely important. You should test your model with the `testthat` package. You can use the `use_test()` function to create a test file for your model. See files like `tests/testthat/test-model_ddm.R` or `tests/testthat/test-model_cswald.R` for examples of how we test models. BRMS models take a long time to fit, so we don't test the actual fitting process.
+
+Instead we use brms' mock backend. This is not a bmm feature — `backend = "mock"` and `mock_fit` are arguments of `brms::brm()`, and they reach it because `bmm()` passes `...` through. The whole backend is two lines: whatever you pass as `mock_fit` is returned in place of the fitted Stan object (a function is called first). Everything before the fit — data checks, formula translation, family construction, stanvars, initial values — runs for real, which is exactly what you want to test. For example, here's a mock test pattern:
 
 ``` r
 test_that("gcm model runs without errors", {
@@ -281,18 +262,21 @@ test_that("gcm model runs without errors", {
 
   dat <- data.frame(
     resp = rnorm(10),
-    condition = rep(c("A", "B"), 5)
+    exemplar = rep(c("A", "B"), 5),
+    category = rep(c(1, 2), each = 5)
   )
 
   f <- bmmformula(param1 ~ 1, param2 ~ 1)
   mock_fit <- bmm(
     f, dat,
-    gcm(resp_var1 = "resp"),
+    gcm(resp_var1 = "resp", required_arg1 = "exemplar", required_arg2 = "category"),
     backend = "mock", mock_fit = 1, rename = FALSE
   )
   expect_equal(mock_fit$fit, 1)
 })
 ```
+
+Two things about that call are easy to get wrong. The alias generated by the template calls `stop_missing_args()`, so every argument without a default has to be supplied — a test that passes only the response variable errors before it reaches the pipeline. And the argument is `mock_fit`, not `mock`. You will see `mock = 1` in the existing test files (48 occurrences against 21 of `mock_fit = 1` in 1.3.2); it works only because R partial-matches it to `mock_fit` on the way through `...`. Write `mock_fit`.
 
 The tests based on the `testthat` package are run every time you call the `check()` command. Before you submit your changes, make sure that all tests pass.
 
