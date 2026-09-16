@@ -159,7 +159,7 @@ The `.my_new_model_defaults` list holds the parameter specification (one such li
 -   `links` - Named list of link functions for each parameter. The available options are `"identity"`, `"log"`, `"softplus"`, `"log1p"`, `"logm1"`, `"inverse"`, `"sqrt"`, `"logit"`, `"probit"`, `"tan_half"` and `"cloglog"` (`R/helpers-parameters.R:76`). `"softplus"`, added in 1.3.2 (#363), is an opt-in alternative to `"log"` for positively-bounded parameters: it keeps the parameter positive but grows linearly rather than exponentially, so predictor effects are additive on the natural scale and large values do not blow up. Users can override any of these per parameter through the model alias's `links` argument
 -   `fixed_parameters` - Named list of parameters fixed to constant values (e.g., `list(mu = 0)`)
 -   `priors` - Named list with `main` (intercept) and `effects` (slopes) priors per parameter. The constructor stores this under the model object's `default_priors` field
--   `init_ranges` - Named list of `c(lower, upper)` vectors for MCMC initialization (see [The `init_ranges` field and `create_initfun()`](#the-init_ranges-field-and-create_initfun))
+-   `init_ranges` - Named list of `c(lower, upper)` vectors for MCMC initialization (see @sec-init-ranges)
 
 The constructor copies these into the model object (renaming `priors` to `default_priors`) alongside the response and auxiliary variables (`resp_vars`, `other_vars`), the model metadata (`domain`, `task`, `name`, `citation`, `requirements`), and the `version`. Keeping the fields inline means a new field on the model object is a one-line addition you can see and copy directly; the trade-off is that older models need updating when a field is added (a periodic, mechanical refactor).
 
@@ -337,7 +337,7 @@ This is purely a technical workaround to satisfy brms requirements; the fixed `m
 Earlier versions tracked this with a `void_mu` flag in the model definition. The flag was never read by the infrastructure -- suppression is handled entirely by `fixed_parameters` and the family's `dpars` -- and it has been removed. If you see `void_mu` in older code or notes, it is dead and can be deleted.
 :::
 
-## The `init_ranges` field and `create_initfun()` {#the-init_ranges-field-and-create_initfun}
+## The `init_ranges` field and `create_initfun()` {#sec-init-ranges}
 
 Models with custom families often require carefully chosen initial values for stable MCMC sampling. When a model's likelihood has hard boundaries or regions of zero density, the default brms initialization -- which draws from a wide symmetric range -- will often place chains in impossible territory, causing immediate divergences or chain failures.
 

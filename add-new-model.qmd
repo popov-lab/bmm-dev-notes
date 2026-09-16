@@ -16,7 +16,7 @@ The full argument list is on the [reference page for `use_model_template()`](../
 
 -   **An unversioned model gets `version = "NA"`** — the literal string, not `NA`. That is what `print()` and the generated documentation will show unless you pass `versions`.
 
--   **The template does not generate everything you may need.** There are no stubs for `check_formula()`, `configure_prior()` or `create_initfun()`; add those yourself only if your model needs them. The generated alias also omits the `@keywords bmmodel` tag, which the package's pkgdown test expects on a user-facing model alias — add it (see the coding conventions chapter).
+-   **The template does not generate everything you may need.** There are no stubs for `check_formula()`, `configure_prior()` or `create_initfun()`; add those yourself only if your model needs them. The generated alias also omits the `@keywords bmmodel` tag, which the package's pkgdown test expects on a user-facing model alias — add it (see @sec-conventions).
 
 ## Example
 

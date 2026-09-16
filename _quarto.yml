@@ -10,6 +10,7 @@ book:
     - bmm-architecture.qmd
     - example-model.qmd
     - add-new-model.qmd
+    - coding-conventions.qmd
   navbar:
     background: primary
     search: true

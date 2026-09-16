@@ -71,6 +71,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="site_libs/quarto-search/fuse.min.js"></script>
 <script src="site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="./">
+<link href="./coding-conventions.html" rel="next">
 <link href="./example-model.html" rel="prev">
 <script src="site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -205,6 +206,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
  <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Adding a new model</span></span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./coding-conventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Coding conventions</span></span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -261,7 +268,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><p><strong><code>versions</code> is the second positional argument.</strong> <code>use_model_template("gcm", TRUE)</code> means <code>versions = TRUE</code>, not <code>custom_family = TRUE</code>. Name the arguments.</p></li>
 <li><p><strong>The stan files are created before the R file is written.</strong> If the call fails partway through, empty <code>.stan</code> files are already on disk and you have to remove them by hand before you can call the function again.</p></li>
 <li><p><strong>An unversioned model gets <code>version = "NA"</code></strong> — the literal string, not <code>NA</code>. That is what <code>print()</code> and the generated documentation will show unless you pass <code>versions</code>.</p></li>
-<li><p><strong>The template does not generate everything you may need.</strong> There are no stubs for <code>check_formula()</code>, <code>configure_prior()</code> or <code>create_initfun()</code>; add those yourself only if your model needs them. The generated alias also omits the <code>@keywords bmmodel</code> tag, which the package’s pkgdown test expects on a user-facing model alias — add it (see the coding conventions chapter).</p></li>
+<li><p><strong>The template does not generate everything you may need.</strong> There are no stubs for <code>check_formula()</code>, <code>configure_prior()</code> or <code>create_initfun()</code>; add those yourself only if your model needs them. The generated alias also omits the <code>@keywords bmmodel</code> tag, which the package’s pkgdown test expects on a user-facing model alias — add it (see <a href="coding-conventions.html" class="quarto-xref"><span>Chapter 6</span></a>).</p></li>
 </ul>
 </section>
 <section id="example" class="level2" data-number="5.1">
@@ -956,6 +963,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       </a>          
   </div>
   <div class="nav-page nav-page-next">
+      <a href="./coding-conventions.html" class="pagination-link" aria-label="Coding conventions">
+        <span class="nav-page-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Coding conventions</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
   </div>
 </nav>
 </div> <!-- /content -->

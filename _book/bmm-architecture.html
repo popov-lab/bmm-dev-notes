@@ -206,6 +206,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
  <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Adding a new model</span></span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./coding-conventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Coding conventions</span></span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -224,7 +230,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#data-flow-the-attribute-bridge-pattern" id="toc-data-flow-the-attribute-bridge-pattern" class="nav-link" data-scroll-target="#data-flow-the-attribute-bridge-pattern"><span class="header-section-number">3.6</span> Data flow: the attribute bridge pattern</a></li>
   <li><a href="#default-priors-structure" id="toc-default-priors-structure" class="nav-link" data-scroll-target="#default-priors-structure"><span class="header-section-number">3.7</span> Default priors structure</a></li>
   <li><a href="#suppressing-mu-for-models-without-a-location-parameter" id="toc-suppressing-mu-for-models-without-a-location-parameter" class="nav-link" data-scroll-target="#suppressing-mu-for-models-without-a-location-parameter"><span class="header-section-number">3.8</span> Suppressing <code>mu</code> for models without a location parameter</a></li>
-  <li><a href="#the-init_ranges-field-and-create_initfun" id="toc-the-init_ranges-field-and-create_initfun" class="nav-link" data-scroll-target="#the-init_ranges-field-and-create_initfun"><span class="header-section-number">3.9</span> The <code>init_ranges</code> field and <code>create_initfun()</code></a></li>
+  <li><a href="#sec-init-ranges" id="toc-sec-init-ranges" class="nav-link" data-scroll-target="#sec-init-ranges"><span class="header-section-number">3.9</span> The <code>init_ranges</code> field and <code>create_initfun()</code></a></li>
   <li><a href="#within-chain-threading" id="toc-within-chain-threading" class="nav-link" data-scroll-target="#within-chain-threading"><span class="header-section-number">3.10</span> Within-chain threading</a></li>
   <li><a href="#version-tables" id="toc-version-tables" class="nav-link" data-scroll-target="#version-tables"><span class="header-section-number">3.11</span> Version tables</a>
   <ul class="collapse">
@@ -407,7 +413,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><code>links</code> - Named list of link functions for each parameter. The available options are <code>"identity"</code>, <code>"log"</code>, <code>"softplus"</code>, <code>"log1p"</code>, <code>"logm1"</code>, <code>"inverse"</code>, <code>"sqrt"</code>, <code>"logit"</code>, <code>"probit"</code>, <code>"tan_half"</code> and <code>"cloglog"</code> (<code>R/helpers-parameters.R:76</code>). <code>"softplus"</code>, added in 1.3.2 (#363), is an opt-in alternative to <code>"log"</code> for positively-bounded parameters: it keeps the parameter positive but grows linearly rather than exponentially, so predictor effects are additive on the natural scale and large values do not blow up. Users can override any of these per parameter through the model alias’s <code>links</code> argument</li>
 <li><code>fixed_parameters</code> - Named list of parameters fixed to constant values (e.g., <code>list(mu = 0)</code>)</li>
 <li><code>priors</code> - Named list with <code>main</code> (intercept) and <code>effects</code> (slopes) priors per parameter. The constructor stores this under the model object’s <code>default_priors</code> field</li>
-<li><code>init_ranges</code> - Named list of <code>c(lower, upper)</code> vectors for MCMC initialization (see <a href="#the-init_ranges-field-and-create_initfun">The <code>init_ranges</code> field and <code>create_initfun()</code></a>)</li>
+<li><code>init_ranges</code> - Named list of <code>c(lower, upper)</code> vectors for MCMC initialization (see <a href="#sec-init-ranges" class="quarto-xref"><span>Section 3.9</span></a>)</li>
 </ul>
 <p>The constructor copies these into the model object (renaming <code>priors</code> to <code>default_priors</code>) alongside the response and auxiliary variables (<code>resp_vars</code>, <code>other_vars</code>), the model metadata (<code>domain</code>, <code>task</code>, <code>name</code>, <code>citation</code>, <code>requirements</code>), and the <code>version</code>. Keeping the fields inline means a new field on the model object is a one-line addition you can see and copy directly; the trade-off is that older models need updating when a field is added (a periodic, mechanical refactor).</p>
 <p>Each model is accompanied by a user-facing alias, the documentation of which is generated automatically based on the info list in the model definition.</p>
@@ -604,8 +610,8 @@ Note
 </div>
 </div>
 </section>
-<section id="the-init_ranges-field-and-create_initfun" class="level2" data-number="3.9">
-<h2 data-number="3.9" class="anchored" data-anchor-id="the-init_ranges-field-and-create_initfun"><span class="header-section-number">3.9</span> The <code>init_ranges</code> field and <code>create_initfun()</code></h2>
+<section id="sec-init-ranges" class="level2" data-number="3.9">
+<h2 data-number="3.9" class="anchored" data-anchor-id="sec-init-ranges"><span class="header-section-number">3.9</span> The <code>init_ranges</code> field and <code>create_initfun()</code></h2>
 <p>Models with custom families often require carefully chosen initial values for stable MCMC sampling. When a model’s likelihood has hard boundaries or regions of zero density, the default brms initialization – which draws from a wide symmetric range – will often place chains in impossible territory, causing immediate divergences or chain failures.</p>
 <p>This is particularly relevant for response time models, where parameters have hard constraints relative to the observed data. For example, the non-decision time parameter <code>ndt</code> must be positive <em>and</em> smaller than the fastest observed RT – otherwise the implied decision time would be negative and the likelihood undefined. Similarly, boundary separation (<code>bound</code>) must be strictly positive and within a plausible range, and extreme drift rate values can cause numerical overflow in the Wiener likelihood. Circular models (mixture2p, mixture3p) typically do not have these issues and work fine with default initialization.</p>
 <p>The <code>init_ranges</code> field in the model definition addresses this by specifying narrow, safe windows on the native (pre-link-transform) scale:</p>
