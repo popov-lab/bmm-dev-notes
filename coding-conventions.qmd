@@ -10,7 +10,7 @@ Use the package's own helpers rather than the base functions:
 
 | Instead of | Use | Why |
 |------------------|------------------|-----------------------------------|
-| `stop()` | `stop2()` | Interpolates with glue and sets `call. = FALSE` |
+| `stop()` | `stop2()` | Interpolates with glue, and suppresses the "Error in f(x):" call prefix so the user reads the message, not our internals |
 | `warning()` | `warning2()` | Same |
 | `message()` | `message2()` | Same, and respects `options(bmm.silent)` |
 | `if (cond) stop2(...)` | `stopif(cond, ...)` | One line, and reads as the condition it guards |
@@ -18,13 +18,13 @@ Use the package's own helpers rather than the base functions:
 | `sprintf()` | `glue::glue()` | Named interpolation, no positional arguments to miscount |
 | `paste(x, collapse = ", ")` | `collapse_comma(x)` | Also quotes each element |
 
-In 1.3.2 the counts are `stopif` 173, `stop2` 38, `warning2` 27, `warnif` 22, `message2` 11. The base equivalents appear four times, and every one of them is either inside the definition of `stop2()`/`warning2()` themselves (`R/utils.R:169`, `:174`) or in `R/brms-misc.R`, which is a vendored read-only copy of brms code.
+In 1.3.2 the counts are `stopif` 173, `stop2` 38, `warning2` 27, `warnif` 22, `message2` 11. The base equivalents appear four times, and every one of them is either inside the definition of `stop2()`/`warning2()` themselves (`R/utils.R:169`, `:174`) or in `R/brms-misc.R`, which is vendored code: a copy of brms internals kept inside bmm rather than called through `brms::`, and marked read-only.
 
 Two of the reasons deserve spelling out, because they are not stylistic.
 
 `message2()` checks `getOption("bmm.silent", 1)` and prints nothing at silence level 2 or above (`R/utils.R:177-184`). Tests set `withr::local_options("bmm.silent" = 2)` to keep output clean. A base `message()` call ignores that and will make somebody's test noisy.
 
-`stopif()` and `warnif()` pass `env.frame = -2` down to `stop2()` (`R/utils.R:189-199`), which is what lets the message interpolate variables from *your* function rather than from inside the helper. So this works and needs no `glue()` call of its own:
+`stopif()` and `warnif()` pass `env.frame = -2` down to `stop2()` (`R/utils.R:189-199`). That number counts frames back up the call stack: `-1` would interpolate in `stopif()`'s own frame, where your variables do not exist, so `-2` reaches past it into the function that called `stopif()`. This is what lets the message interpolate variables from *your* function. So this works and needs no `glue()` call of its own:
 
 ``` r
 stopif(
@@ -74,7 +74,7 @@ if (!is.null(x)) {
 
 Do not write `return(out)` as the last line of a function.
 
-**No `set.seed()` inside a function, and no `seed` argument.** A function that sets the seed silently rewrites the caller's random state. In 1.3.2 `set.seed()` appears six times and all six are in roxygen `@examples` blocks, where it is the right thing. If you need reproducibility inside a function, take the draws you were given; if you need it in a test, set the seed in the test.
+**No `set.seed()` inside a function, and no `seed` argument.** A function that sets the seed silently rewrites the caller's random state. In 1.3.2 `set.seed()` appears six times and all six are in `@examples` blocks in the roxygen comments — the `#'` comments above each function from which `devtools::document()` generates the help pages — where it is the right thing. If you need reproducibility inside a function, take the draws you were given; if you need it in a test, set the seed in the test.
 
 **snake_case** for functions and variables. Private helpers are prefixed with a dot (`.base_imm_formula`, `.imm_mixture_family`). One reservation: a private helper must **not** be named `.model_*`, because `supported_models()` lists every object matching `^\.model_` as a model (`R/helpers-model.R:251`).
 
@@ -95,7 +95,7 @@ Validate in the **exported constructor only** — the user-facing alias. `.model
 ```{.r filename="R/model_m3.R" bmm-src="m3" bmm-excerpt="abridged"}
 m3 <- function(resp_cats, num_options, choice_rule = "softmax", version = "custom", ...) {
   call <- match.call()
-  stop_missing_args()
+  stop_missing_args() # errors naming any argument with no default that the user omitted
   stopif(
     length(num_options) != length(resp_cats),
     "The option variables should have the same length as the response variables."
@@ -113,7 +113,7 @@ These are **plain functions, not S3 methods.** Do not name them `log_lik.mymodel
 ``` r
 sdm_simple <- brms::custom_family(
   name = "sdm_simple",
-  dpars = c("mu", "c", "kappa"),
+  dpars = c("mu", "c", "kappa"),   # distributional parameters
   ...
   log_lik = log_lik_sdm_simple,
   posterior_predict = posterior_predict_sdm_simple
@@ -122,7 +122,9 @@ sdm_simple <- brms::custom_family(
 
 brms checks the first arguments when you build the family: `log_lik` must start with `(i, prep)` and `posterior_predict` with `(i, prep, ...)`.
 
-The contract inside is easy to get wrong in one specific way. `brms::get_dpar(prep, "par", i = i)` returns a **vector with one value per posterior draw**, not a scalar, and your function must return a vector of that same length. The response is a scalar, `prep$data$Y[i]`:
+Both take `i`, the index of one observation, and `prep`, an object brms assembles from the fitted model and hands to you. `prep` holds the posterior draws and the data, and you pull values out of it rather than computing them: `brms::get_dpar()` for a parameter, `prep$data$Y` for the response.
+
+The contract is easy to get wrong in one specific way. `brms::get_dpar(prep, "par", i = i)` returns a **vector with one value per posterior draw**, not a scalar, and your function must return a vector of that same length. The response is a scalar, `prep$data$Y[i]`:
 
 ```{.r filename="R/model_sdm.R" bmm-src="log_lik_sdm_simple"}
 log_lik_sdm_simple <- function(i, prep) {
@@ -136,7 +138,7 @@ log_lik_sdm_simple <- function(i, prep) {
 
 A density function that collapses its arguments (an `if` on a vector, a `sum()`) will return a scalar here, and brms will recycle it across all draws without complaint. The posterior predictive checks then look suspiciously clean. Check `length()` of what you return.
 
-`loop` in `custom_family()` is about the generated *Stan* code, not about this R function. With `loop = FALSE` brms emits a vectorized likelihood call, and with `loop = TRUE` it emits one call per observation. The consequence you will hit: with `loop = FALSE` you may not use the `[n]` index in `vars`, and brms stops with "Invalid use of index '[n]' in an unlooped custom likelihood". SDM uses `loop = FALSE` and no `vars`; EZDM uses `loop = TRUE` with `vars = c("vreal1[n]", "vint1[n]", "trials[n]")`.
+`loop` in `custom_family()` is about the generated *Stan* code, not about this R function. With `loop = FALSE` brms emits a vectorized likelihood call, and with `loop = TRUE` it emits one call per observation. The consequence you will hit concerns `vars`, the `custom_family()` argument that names extra Stan variables your likelihood needs beyond the parameters (aggregate counts, trial numbers). With `loop = FALSE` you may not index those with `[n]`, because there is no per-observation loop to index inside, and brms stops with "Invalid use of index '[n]' in an unlooped custom likelihood". SDM uses `loop = FALSE` and no `vars`; EZDM uses `loop = TRUE` with `vars = c("vreal1[n]", "vint1[n]", "trials[n]")`.
 
 ## Naming traps
 
@@ -144,11 +146,11 @@ Each of these cost somebody real debugging time, and none of them produce an err
 
 **A custom family's `dpars` may not contain `_` or `.`, and may not end with a digit.** Both are checked in `brms::custom_family()` (brms 2.23.0): "Dots or underscores are not allowed in 'dpars'" and "'dpars' should not end with a number". So neither `delta_1` nor `delta1` is a legal dpar name. The digits you see on IMM parameters (`kappa1`, `theta3`, `mu2`) are generated by `brms::mixture()` itself, not declared by bmm, and non-linear parameters introduced through `nlf()` are not subject to this check.
 
-**Reusing a brms dpar name silently inherits its default prior.** `brms:::def_dpar_prior()` attaches a default prior by dpar name, and the names it recognizes are `mu`, `sigma`, `shape`, `nu`, `phi`, `kappa`, `beta`, `zi`, `hu`, `zoi`, `coi`, `bs`, `ndt`, `bias`, `quantile`, `xi`, `alpha`, `disc` and `theta`. Worse, the lookup goes through `brms:::dpar_class()`, which strips trailing digits, so `kappa1` is looked up as `kappa`. bmm reuses several of these names deliberately and sets its own defaults over the top, which is fine — the trap is a parameter you reuse and then *forget* to give a default prior, which will quietly get brms' prior for an unrelated quantity.
+**Reusing a brms dpar name silently inherits its default prior.** `brms:::def_dpar_prior()` attaches a default prior by dpar name (the three colons reach an unexported function, which is why you will not find it in brms' documentation), and the names it recognizes are `mu`, `sigma`, `shape`, `nu`, `phi`, `kappa`, `beta`, `zi`, `hu`, `zoi`, `coi`, `bs`, `ndt`, `bias`, `quantile`, `xi`, `alpha`, `disc` and `theta`. Worse, the lookup goes through `brms:::dpar_class()`, which strips trailing digits, so `kappa1` is looked up as `kappa`. bmm reuses several of these names deliberately and sets its own defaults over the top, which is fine — the trap is a parameter you reuse and then *forget* to give a default prior, which will quietly get brms' prior for an unrelated quantity.
 
 **A dpar must not be uniquely prefixed by `thres`.** `brms:::stan_log_lik_custom()` assigns `p$thres` only for ordinal families but reads `p$thres` unconditionally when it builds the likelihood call. `p` is a list keyed by dpar name, and `$` partial-matches on lists, so a dpar named `threshold` is found by `p$thres` and passed where the ordinal thresholds belong. The result is Stan code that does not parse, from a name that looks perfectly reasonable.
 
-**Stan probability-function suffixes require the bar syntax at every call site.** stanc 2.39 says it plainly:
+**Stan probability-function suffixes require the bar syntax at every call site.** `stanc`, the Stan compiler, says it plainly (version 2.39):
 
 > Probability functions with suffixes `_lpdf`, `_lupdf`, `_lpmf`, `_lupmf`, `_cdf`, `_lcdf` and `_lccdf`, require a vertical bar (\|) between the first two arguments.
 
@@ -162,7 +164,7 @@ A helper you name `sdt_cdf` therefore cannot be called as `sdt_cdf(x, mu)`; it h
 
 Exported functions need `@returns` and `@examples`. Two further requirements are enforced by tests rather than by review:
 
-**`@keywords`.** `tests/testthat/test-pkgdown.R` reads every `man/*.Rd` file, drops the ones with `\keyword{internal}`, and fails if any remaining topic is not covered by the reference section of `_pkgdown.yml`. Coverage can be by name or through a `has_keyword()` selector, and `_pkgdown.yml:56` has `has_keyword("bmmodel")`. So a new model's user-facing alias needs `#' @keywords bmmodel`, which all eight released model aliases carry and which `use_model_template()` does **not** generate. Add it yourself. An exported function that is not a model gets `@keywords internal` or a place in `_pkgdown.yml`.
+**`@keywords`.** The package website is built by pkgdown, which needs every public help topic to appear somewhere in its reference index, and `_pkgdown.yml` is where that index is declared. `tests/testthat/test-pkgdown.R` reads every `man/*.Rd` file, drops the ones with `\keyword{internal}`, and fails if any remaining topic is not covered by the reference section of `_pkgdown.yml`. Coverage can be by name or through a `has_keyword()` selector, and `_pkgdown.yml:56` has `has_keyword("bmmodel")`. So a new model's user-facing alias needs `#' @keywords bmmodel`, which all eight released model aliases carry and which `use_model_template()` does **not** generate. Add it yourself. An exported function that is not a model gets `@keywords internal` or a place in `_pkgdown.yml`.
 
 **A NEWS entry for every user-visible change**, under the right heading in `NEWS.md`, with the issue or PR number in parentheses. Read the 1.3.2 section for the expected level of detail: entries say what changed, what the old behaviour was, and why it mattered, not just "fixed a bug".
 
@@ -170,7 +172,7 @@ Exported functions need `@returns` and `@examples`. Two further requirements are
 
 Test files mirror source file names — `R/model_ddm.R` is tested by `tests/testthat/test-model_ddm.R`. This is a convention rather than a rule: at 1.3.2 nine files under `R/` have no matching test file and six test files have no matching source file, usually because they test a theme (`test-default-priors.R`, `test-pkgdown.R`) rather than a file. A new model gets a matching test file.
 
-Use the mock backend for pipeline tests and `testthat` edition 3 (`Config/testthat/edition: 3` in `DESCRIPTION`). Set `withr::local_options("bmm.silent" = 2)` so `message2()` output does not clutter the run.
+Use brms' mock backend for pipeline tests (@sec-add-new-model explains what it is and the two ways to get the call wrong) and `testthat` edition 3 (`Config/testthat/edition: 3` in `DESCRIPTION`). Set `withr::local_options("bmm.silent" = 2)` so `message2()` output does not clutter the run.
 
 ### Parameter recovery, and the circularity trap
 

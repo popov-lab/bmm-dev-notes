@@ -40,7 +40,7 @@ AI assistance is welcome. The maintainers use it. This section is not a warning 
 
 **Say in the pull request body which parts were AI-assisted and how you verified them.** This is not a disclaimer and it does not count against you. It tells the reviewer where to look hardest, which makes the review faster and better, and it is the difference between a reviewer trusting the rest of the diff and checking all of it twice.
 
-**What the review does with it.** An automated AI functionality review runs on every pull request as a required status check. It reads the diff and reports what it thinks the code does. It never counts as an approval. A human approves, and for a new model that human has installed your branch and fitted the model.
+**What the review does with it.** An automated AI functionality review runs on every pull request as a required status check, meaning GitHub will not let the pull request be merged until it has run. It reads the diff and reports what it thinks the code does. It never counts as an approval. A human approves, and for a new model that human has installed your branch and fitted the model.
 
 ### What review will send back
 

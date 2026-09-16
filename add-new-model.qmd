@@ -1,4 +1,4 @@
-# Adding a new model
+# Adding a new model {#sec-add-new-model}
 
 If you have read [Section @sec-bmm-architecture] and [Section @sec-example-model], you should have a pretty good idea of how the `bmm` package functions. Now it's time to add your new model.
 
