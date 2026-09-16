@@ -19,9 +19,9 @@ install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOpt
 cmdstanr::install_cmdstan()
 ```
 
-## Package development via RStudio and devtools
+## Package development with devtools
 
-The bmm package is setup as an RStudio project. Opening the `bmm.Rproj` file will open a new RStudio instance, which facilitates package development with a few commands from the `devtools` package. A great tutorial on package development can be found [here](https://r-pkgs.org/). Below is a summary of the most important steps
+Development runs on the `devtools` package, and the steps below are the same whichever editor you work in. The repository ships a `bmm.Rproj` file, so opening it starts a session with the package root as the working directory in RStudio or Positron; opening the directory in any other editor, or starting R in it from a terminal, gets you to the same place. A great tutorial on package development can be found [here](https://r-pkgs.org/). Below is a summary of the most important steps
 
 1.  Make sure you have the devtools package and a few others installed and loaded
 
@@ -31,7 +31,7 @@ The bmm package is setup as an RStudio project. Opening the `bmm.Rproj` file wil
     install_dev_deps()
     ```
 
-    To avoid having to load the **devtools** package every time, you can add the following code to your `.Rprofile` file
+    Optionally, to avoid loading **devtools** in every session, you can add the following to your `.Rprofile`
 
     ``` r
     if (interactive()) {
@@ -48,7 +48,7 @@ The bmm package is setup as an RStudio project. Opening the `bmm.Rproj` file wil
 2.  Load the current version of the `bmm` package based on your local files
 
     ``` r
-    load_all()  # or ctrl+shift+L
+    load_all()  # ctrl+shift+L in RStudio
     ```
 
     you can use this command whenever you make changes to the package code to see the changes in action. You should not call `library(bmm)` or source the files manually, as this will load the installed version of the package, not the one you are developing.
@@ -69,6 +69,8 @@ The bmm package is setup as an RStudio project. Opening the `bmm.Rproj` file wil
     document()
     ```
 
-## The `local/` directory
+## Untracked scratch work
 
-The `local/` directory in the bmm repository is used for machine-specific scripts that are not tracked by git. When developing a new model, you should create a parameter recovery script at `local/<model_name>_parameter_recovery.R`. This script should simulate data from the model, fit it, and verify that parameters are recovered accurately. These scripts are not run by `R CMD check` but are expected for all new models.
+Development produces files that belong on your machine rather than in the package: exploratory scripts, fitted model objects, scratch data. bmm's `.gitignore` excludes `local/` for this purpose — `AGENTS.md` describes it as machine-specific scratch that is neither synced nor shared — so anything you put there stays out of your commits. Nothing requires you to use it; any location git ignores will do.
+
+Parameter recovery scripts are the main thing you will keep out of the package this way. What the study has to show, and how it reaches the reviewer given that it is not committed, is in @sec-conventions.

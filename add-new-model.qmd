@@ -22,13 +22,13 @@ The full argument list is on the [reference page for `use_model_template()`](../
 
 Let's add a new model called `gcm`. Let's assume that you have tested the model in Stan and you have the Stan code ready. We want to define a custom family for the `gcm` model, and we want to define the following blocks: `likelihood`, `functions` (see `?brms::stanvar` for an explanation of the blocks).
 
-First you set up your system and git environment as described in [Section @sec-setup]. Then you can run the following code from RStudio in the root directory of the `bmm` package:
+First you set up your system and git environment as described in [Section @sec-setup]. Then you can run the following code from R in the root directory of the `bmm` package:
 
 ``` r
 use_model_template("gcm", custom_family = TRUE, stanvar_blocks = c("likelihood", "functions"))
 ```
 
-This will create the file `model_gcm.R` in the `R/` directory and the files `gcm_likelihood.stan` and `gcm_functions.stan` in the `inst/stan_chunks/` directory. The function will also open the files in RStudio. You will see the following output in the console:
+This will create the file `model_gcm.R` in the `R/` directory and the files `gcm_likelihood.stan` and `gcm_functions.stan` in the `inst/stan_chunks/` directory. The function will also open the files in your editor, through `usethis::edit_file()`. You will see the following output in the console:
 
 ```         
 • Modify 'inst/stan_chunks/gcm_likelihood.stan'
@@ -296,7 +296,7 @@ The tests based on the `testthat` package are run every time you call the `check
 
 ### Parameter recovery
 
-Additionally, you should perform a full test of the model by running it in a separate script and ensuring it gives meaningful results. Create a parameter recovery script at `local/<model_name>_parameter_recovery.R`. At the very least, you should perform basic parameter recovery simulations for hyper-parameters (i.e., means and standard deviations) as well as subject-level parameters to give users an idea of how much data they need to adequately estimate the model.
+Additionally, you should perform a full test of the model by running it in a separate script and ensuring it gives meaningful results. At the very least, you should perform basic parameter recovery simulations for hyper-parameters (i.e., means and standard deviations) as well as subject-level parameters to give users an idea of how much data they need to adequately estimate the model. @sec-conventions covers what the study has to show — in particular why you must not simulate and fit with the same distribution function — and how to report it.
 
 ### Distribution functions
 

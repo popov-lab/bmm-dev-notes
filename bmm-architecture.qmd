@@ -368,7 +368,7 @@ The conversion between native and sampling scales is handled by `link_transform(
 
 Passing `threads` to `bmm()` asks brms to split each chain's likelihood evaluation across cores. For most models nothing is needed: brms slices the data and calls the family's likelihood inside `partial_log_lik`, and a custom family written the usual way comes along for the ride. A model that injects Stan code through `stanvar()` is the exception, because that code has to be written differently depending on whether it ends up inside `partial_log_lik` or in the model block.
 
-SDM is the one model in 1.3.2 that does this (#374, up to roughly 45% faster in the release benchmarks). It is worth reading if your model has a likelihood with a normalizing constant computed over groups of rows, because the same three pieces will apply.
+SDM is the one model in 1.3.2 that does this; the `NEWS.md` entry reports it as reducing fitting time by up to ~45% in benchmarks (#374). It is worth reading if your model has a likelihood with a normalizing constant computed over groups of rows, because the same three pieces will apply.
 
 **1. Two versions of the chunk.** `inst/stan_chunks/` holds both `sdm_simple_likelihood.stan` and `sdm_simple_likelihood_threaded.stan`. The threaded one calls a `_slice` variant of the same function and passes `start` and `end`, the row bounds brms makes available inside `partial_log_lik`:
 
