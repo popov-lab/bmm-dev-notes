@@ -10,16 +10,16 @@ Run it from the root of the package. It writes `R/model_<model_name>.R` containi
 
 The full argument list is on the [reference page for `use_model_template()`](../reference/use_model_template.html). Three things about the call are worth knowing:
 
--   **`versions` is the second positional argument.** `use_model_template("gcm", TRUE)` means `versions = TRUE`, not `custom_family = TRUE`. Name the arguments.
--   **The stan files are created before the R file is written.** If the call fails partway through, empty `.stan` files are already on disk and you have to remove them by hand before you can call the function again.
--   **An unversioned model gets `version = "NA"`** — the literal string, not `NA`.
+- **`versions` is the second positional argument.** `use_model_template("gcm", TRUE)` means `versions = TRUE`, not `custom_family = TRUE`. Name the arguments.
+- **The stan files are created before the R file is written.** If the call fails partway through, empty `.stan` files are already on disk and you have to remove them by hand before you can call the function again.
+- **An unversioned model gets `version = "NA"`** — the literal string, not `NA`.
 
 ### What the template leaves for you {.unnumbered}
 
 The generated file follows the package's conventions. Two things in it are placeholders that `check()` will not flag:
 
--   **The prediction functions are empty.** With `custom_family = TRUE`, the family passes `log_lik_<model>()`, `posterior_predict_<model>()` and `posterior_epred_<model>()` to brms, but their bodies are empty, so `loo()`, `pp_check()` and `posterior_epred()` cannot work on your model until you fill them (step 8 below).
--   **The `settable_links` stub is commented out.** Uncomment it, so that its tag line reads `#' @exportS3Method`, if `configure_model()` builds links into the family or the formulas; otherwise delete it (step 2 below).
+- **The prediction functions are empty.** With `custom_family = TRUE`, the family passes `log_lik_<model>()`, `posterior_predict_<model>()` and `posterior_epred_<model>()` to brms, but their bodies are empty, so `loo()`, `pp_check()` and `posterior_epred()` cannot work on your model until you fill them (step 8 below).
+- **The `settable_links` stub is commented out.** Uncomment it, so that its tag line reads `#' @exportS3Method`, if `configure_model()` builds links into the family or the formulas; otherwise delete it (step 2 below).
 
 There are no stubs for `check_formula()`, `configure_prior()`, `create_initfun()`, `revert_check_data()` or the optional post-fit methods; add those only if your model needs them.
 
@@ -133,21 +133,21 @@ Everything below lives outside your model file.
 
 **The test suite fails without these:**
 
--   An entry in `data_column_roles` (`R/helpers-model.R`) labelling each alias argument without a default: what the data column holds, in a few words. Use `<model>_<version>` keys where versions differ, and `NA` for an argument that names no column. Copy the entry of a similar model. The *Get started* article builds its model tables from it.
--   A case in `stored_frame_cases()` in `tests/testthat/test-update.R` (a model, a formula and a small dataset, like the cases already there), and a `revert_check_data()` method if your `check_data()` changes columns (@sec-revert-check-data).
--   Your model working in the loop of `"check_data() returns a data.frame()"` in `tests/testthat/test-helpers-data.R`. The loop calls every constructor with a shared set of arguments and a shared data frame; add a branch for your model if those do not fit it, as `sdt_ranking` and `sdt_cdp` have, or exclude it with a pointer to its own test, as `sdt_rating` is.
--   `@keywords bmmodel` on the alias, and a constructor that runs without arguments and keeps the template's field order.
+- An entry in `data_column_roles` (`R/helpers-model.R`) labelling each alias argument without a default: what the data column holds, in a few words. Use `<model>_<version>` keys where versions differ, and `NA` for an argument that names no column. Copy the entry of a similar model. The *Get started* article builds its model tables from it.
+- A case in `stored_frame_cases()` in `tests/testthat/test-update.R` (a model, a formula and a small dataset, like the cases already there), and a `revert_check_data()` method if your `check_data()` changes columns (@sec-revert-check-data).
+- Your model working in the loop of `"check_data() returns a data.frame()"` in `tests/testthat/test-helpers-data.R`. The loop calls every constructor with a shared set of arguments and a shared data frame; add a branch for your model if those do not fit it, as `sdt_ranking` and `sdt_cdp` have, or exclude it with a pointer to its own test, as `sdt_rating` is.
+- `@keywords bmmodel` on the alias, and a constructor that runs without arguments and keeps the template's field order.
 
 **Review expects these:**
 
--   A branch in `response_annotations()` (`R/helpers-model.R`) giving the coding each response variable needs ("radians in \[-pi, pi\]", "seconds"). `print()` shows it next to each response.
--   A `domain` that places the model in the right task group (step 1).
--   A test file, a parameter recovery study, an example dataset, an article, and a `NEWS.md` entry (below and @sec-conventions).
+- A branch in `response_annotations()` (`R/helpers-model.R`) giving the coding each response variable needs ("radians in \[-pi, pi\]", "seconds"). `print()` shows it next to each response.
+- A `domain` that places the model in the right task group (step 1).
+- A test file, a parameter recovery study, an example dataset, an article, and a `NEWS.md` entry (below and @sec-conventions).
 
 **Optional extension points.** The defaults cover most models; implement one only when its condition applies.
 
 | Method | Implement when | Example |
-|-------------------------|-----------------------------|-----------------|
+|-------------------------|-----------------------------|------------------|
 | `pp_observables()`, `pp_simulate()` | the likelihood has more than one observable (RT and choice, counts and means), so `pp_check()` should check each. Add the model to `registered_models` in `test-pp_observables.R`. | `R/model_ddm.R` |
 | `native_transform()` | the map from sampling to native scale is not elementwise `links` plus at most one softmax group, or depends on the design | `native_transform.non_targets()` |
 | `data_check_findings()` | users commonly make a data mistake that `check_data()` tolerates; `bmm_data_check()` reports it | `data_check_findings.circular()` |
@@ -208,12 +208,12 @@ A custom family also needs distribution functions in `R/distributions.R`: `d*` a
 
 Most of the post-fit tools read the model object and need no code from you:
 
--   **`conditional_effects()`** and the **`emmeans`** integration work through the `bmmfit` class.
--   **`native_parameters()`** returns posterior draws of the parameters on their native scale, using your `links` through the default `native_transform()` method.
--   **`parameter_info()`** and **`prior_info()`** read `parameters`, `fixed_parameters`, `links` and the default priors. A parameter in `fixed_parameters` but not in `parameters` (a dummy `mu`) is treated as family machinery and left out of the `prior_info()` report.
--   **`posterior_epred()`** and **`fitted()`** call the `posterior_epred` function of your family. Models with class `"circular"` refuse them, because the mean of a circular error is not useful.
--   **`pp_check()`** checks the brms response by default; `pp_observables()` extends it to further observables.
--   **`bmm_data_check()`** runs your `check_data()` without compiling and adds anything your `data_check_findings()` method reports.
+- **`conditional_effects()`** and the **`emmeans`** integration work through the `bmmfit` class.
+- **`native_parameters()`** returns posterior draws of the parameters on their native scale, using your `links` through the default `native_transform()` method.
+- **`parameter_info()`** and **`prior_info()`** read `parameters`, `fixed_parameters`, `links` and the default priors. A parameter in `fixed_parameters` but not in `parameters` (a dummy `mu`) is treated as family machinery and left out of the `prior_info()` report.
+- **`posterior_epred()`** and **`fitted()`** call the `posterior_epred` function of your family. Models with class `"circular"` refuse them, because the mean of a circular error is not useful.
+- **`pp_check()`** checks the brms response by default; `pp_observables()` extends it to further observables.
+- **`bmm_data_check()`** runs your `check_data()` without compiling and adds anything your `data_check_findings()` method reports.
 
 ## Add an example dataset
 
