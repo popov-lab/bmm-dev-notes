@@ -6,7 +6,7 @@ You don't have to create the files by hand. `use_model_template()` generates the
 
 ## What `use_model_template()` does {.unnumbered}
 
-Run it from the root of the package. It writes `R/model_<model_name>.R` containing the parameter specification, the model constructor, the user-facing alias, and stub methods for `check_data`, `bmf2bf`, `configure_model` and `postprocess_brm`. With `custom_family = TRUE` it also creates one empty `inst/stan_chunks/<model_name>_<block>.stan` file per entry in `stanvar_blocks`, and wires the code that reads them into `configure_model`.
+Run it from the root of the package. It writes `R/model_<model_name>.R` containing the parameter specification, the model constructor, the user-facing alias, and stub methods for `check_data`, `bmf2bf`, `configure_model` and `postprocess_brm`. With `custom_family = TRUE` it also creates one empty `inst/stan_chunks/<model_name>_<block>.stan` file per entry in `stanvar_blocks`, wires the code that reads them into `configure_model`, and adds empty `log_lik`, `posterior_predict` and `posterior_epred` functions that the family already points to.
 
 The full argument list is on the [reference page for `use_model_template()`](../reference/use_model_template.html). Three things about the call are worth knowing:
 
@@ -16,13 +16,10 @@ The full argument list is on the [reference page for `use_model_template()`](../
 
 ### What the template leaves for you {.unnumbered}
 
-The generated file is a starting point that lags behind the package's conventions in a few places. Fix these before your first `check()`:
+The generated file follows the package's conventions. Two things in it are placeholders that `check()` will not flag:
 
--   **Add `#' @keywords bmmodel`** to the alias's roxygen block. The pkgdown test fails without it under `devtools::test()`; it is skipped inside `check()`, so do not rely on `check()` to catch it (see @sec-conventions).
--   **Add an `sd` prior to every parameter.** The template emits only `main` and `effects`; see @sec-default-priors.
--   **Add `log_lik`, `posterior_predict` and `posterior_epred`** to the `brms::custom_family()` call. The skeleton has none of them, and without them `loo()`, `pp_check()` and `posterior_epred()` fail on your model (step 8 below).
--   **Add `...` to `postprocess_brm.<model>()`**, or delete the section. The generic is `postprocess_brm(model, fit, ...)` and the stub has only two arguments.
--   **Uncomment or delete the `settable_links` stub, all of it.** If you leave it as generated, roxygen attaches its `#' @exportS3Method` line to the alias below it.
+-   **The prediction functions are empty.** With `custom_family = TRUE`, the family passes `log_lik_<model>()`, `posterior_predict_<model>()` and `posterior_epred_<model>()` to brms, but their bodies are empty, so `loo()`, `pp_check()` and `posterior_epred()` cannot work on your model until you fill them (step 8 below).
+-   **The `settable_links` stub is commented out.** Uncomment it, so that its tag line reads `#' @exportS3Method`, if `configure_model()` builds links into the family or the formulas; otherwise delete it (step 2 below).
 
 There are no stubs for `check_formula()`, `configure_prior()`, `create_initfun()`, `revert_check_data()` or the optional post-fit methods; add those only if your model needs them.
 
@@ -51,9 +48,12 @@ This creates `R/model_gcm.R` and the empty files `inst/stan_chunks/gcm_likelihoo
   fixed_parameters = list(
     mu = 0
   ),
+  # the sd rate follows the parameter's meaning: 1 for sensitivity, strength,
+  # mixing weights and identity-linked drift; 2 for criteria, thresholds,
+  # boundary, ndt, start point and log-linked drift; 4 for circular bias
   priors = list(
-    par1 = list(main = "normal(0, 1)", effects = "normal(0, 0.5)"),
-    par2 = list(main = "normal(0, 0.5)", effects = "normal(0, 0.5)")
+    par1 = list(main = "normal(0, 1)", effects = "normal(0, 0.5)", sd = "exponential(1)"),
+    par2 = list(main = "normal(0, 0.5)", effects = "normal(0, 0.5)", sd = "exponential(2)")
   ),
   init_ranges = list(
     par1 = c(-1, 1),
@@ -61,8 +61,9 @@ This creates `R/model_gcm.R` and the empty files `inst/stan_chunks/gcm_likelihoo
   )
 )
 
+
 .model_gcm <- function(resp_var1 = NULL, required_arg1 = NULL, required_arg2 = NULL,
-                       links = NULL, call = NULL, ...) {
+                                  links = NULL, call = NULL, ...) {
   out <- structure(
     list(
       resp_vars = nlist(resp_var1),
@@ -70,7 +71,7 @@ This creates `R/model_gcm.R` and the empty files `inst/stan_chunks/gcm_likelihoo
       domain = "",
       task = "",
       name = "",
-      citation = "",
+      citation = character(),
       version = "NA",
       requirements = "",
       parameters = .gcm_defaults[["parameters"]],
@@ -89,11 +90,11 @@ This creates `R/model_gcm.R` and the empty files `inst/stan_chunks/gcm_likelihoo
 # uncomment if configure_model() builds the links into the family or into
 # the non-linear formulas rather than reading them from the list above,
 # so that a link set by the user is refused instead of silently ignored:
-#' @exportS3Method
+# #' @exportS3Method
 # settable_links.gcm <- function(model) character(0)
 ```
 
-Below that come the user-facing alias `gcm()` with its roxygen block, and the stubs `check_data.gcm()`, `bmf2bf.gcm()`, `configure_model.gcm()` (with a `custom_family()` skeleton and the lines that read your two Stan files) and `postprocess_brm.gcm()`. Each stub except `configure_model` carries a header comment saying when you may delete it.
+Above the specification, a header comment lists the registries outside the file that a new model must update (see [Before you open the pull request]). Below it come the user-facing alias `gcm()` with its roxygen block, and the stubs `check_data.gcm()`, `bmf2bf.gcm()`, `configure_model.gcm()` (with a `custom_family()` skeleton and the lines that read your two Stan files), `log_lik_gcm()`, `posterior_predict_gcm()`, `posterior_epred_gcm()` and `postprocess_brm.gcm()`. The `check_data`, `bmf2bf` and `postprocess_brm` stubs carry a header comment saying when you may delete them.
 
 For a complete model written to the current conventions, read `R/model_sdt_yn.R`: a custom family on aggregated counts, with its own `log_lik`, `posterior_predict` and `posterior_epred` functions and a `settable_links` method. Most of its length is documentation.
 
@@ -114,7 +115,7 @@ For a complete model written to the current conventions, read `R/model_sdt_yn.R`
 
     Name the method for your model class, not for `bmmodel`, which comes first in every class vector and would shadow it. A model that substitutes the inverse link into its formulas itself also overrides `settable_link_functions()`; the multinomial SDT models are the examples.
 
-3.  **The user-facing alias.** Rename the required arguments, fill in `@examples` with a full example, and add `@keywords bmmodel`. Title and details are generated from the constructor.
+3.  **The user-facing alias.** Rename the required arguments and fill in `@examples` with a full example. Keep the generated `@keywords bmmodel`: the pkgdown test needs it and is skipped inside `check()` (see @sec-conventions). Title and details are generated from the constructor.
 
 4.  **`check_data.gcm()`** checks the data and returns it, ending with `NextMethod("check_data")`. It may compute transformations or store values as data attributes for `configure_model` (see @sec-attribute-bridge). If it adds, renames or packs columns, `update()` needs to undo that before it can re-run it on a fitted model's data; see @sec-revert-check-data.
 
@@ -124,7 +125,7 @@ For a complete model written to the current conventions, read `R/model_sdt_yn.R`
 
 7.  **`postprocess_brm.gcm()`** changes the fitted object (renaming parameters and the like). Delete the section if you need none.
 
-8.  **`log_lik`, `posterior_predict` and `posterior_epred`**, for a custom family. These are plain R functions passed to `brms::custom_family()`; their contracts are in @sec-conventions. They power LOO and WAIC, posterior predictive checks, and `posterior_epred()`/`fitted()`. Build them on `d*()` and `r*()` functions for your model in `R/distributions.R`, which you write first (see [Distribution functions]). If the mean of your response is not a useful quantity, pass `posterior_epred_undefined("gcm")`, as SDM does, so the user gets an error that points to `native_parameters()`. Models built on a native brms family (`brms::mixture()`, `brms::multinomial()`) get all three from brms.
+8.  **`log_lik`, `posterior_predict` and `posterior_epred`**, for a custom family. These are plain R functions passed to `brms::custom_family()`; the template generates them empty and already passes them to the family, and their contracts are in @sec-conventions. They power LOO and WAIC, posterior predictive checks, and `posterior_epred()`/`fitted()`. Build them on `d*()` and `r*()` functions for your model in `R/distributions.R`, which you write first (see [Distribution functions]). If the mean of your response is not a useful quantity, pass `posterior_epred_undefined("gcm")`, as SDM does, so the user gets an error that points to `native_parameters()`. Models built on a native brms family (`brms::mixture()`, `brms::multinomial()`) get all three from brms.
 
 ## Before you open the pull request
 
