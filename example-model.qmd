@@ -22,8 +22,9 @@ The full IMM model is defined in the following internal model class:
       task = "Continuous reproduction",
       name = "Interference measurement model by Oberauer and Lin (2017).",
       citation = glue(
-        "Oberauer, K., & Lin, H.Y. (2017). An interference model \\
-          of visual working memory. Psychological Review, 124(1), 21-59"
+        "Oberauer, K., & Lin, H.-Y. (2017). An interference model \\
+          of visual working memory. Psychological Review, 124(1), 21-59. \\
+          https://doi.org/10.1037/rev0000044"
       ),
       version = version,
       requirements = glue(
@@ -404,8 +405,9 @@ The SDM model is defined in the file `R/model_sdm.R`. The SDM model differs in t
       task = "Continuous reproduction",
       name = "Signal Discrimination Model (SDM) by Oberauer (2023)",
       citation = glue(
-        "Oberauer, K. (2023). Measurement models for visual working memory - \\
-        A factorial model comparison. Psychological Review, 130(3), 841-852"
+        "Oberauer, K. (2023). Measurement models for visual working \\
+        memory\u2014A factorial model comparison. Psychological Review, \\
+        130(3), 841-852. https://doi.org/10.1037/rev0000328"
       ),
       version = version,
       requirements = glue(
@@ -623,7 +625,8 @@ The DDM uses a defaults table to store parameters, links, priors, and init_range
       task = "Two-Alternative Force Choice RT",
       name = "Diffusion Decision Model",
       citation = glue(
-        "Ratcliff, R. (1978). A theory of memory retrieval. Psychological Review, 85(2), 59-108. https://doi.org/10/fjwm2f;"
+        "Ratcliff, R. (1978). A theory of memory retrieval. Psychological \\
+        Review, 85(2), 59-108. https://doi.org/10.1037/0033-295X.85.2.59"
       ),
       version = "NA",
       requirements = glue(
