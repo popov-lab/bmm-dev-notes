@@ -574,6 +574,7 @@ These files work on fitted `bmmfit` objects and need no edits for a new model; t
 -   `helpers-prior.R` - default priors, `default_prior()` and `prior_info()`
 -   `pp_check.R`, `pp_observables.R` - posterior predictive checks, including checks of several observables per model
 -   `helpers-analysis.R`, `plot.R` - the signal detection post-processing (ROC, AUC, latent distributions) and its plots
+-   `report-extract.R` - `model_citation()`, which returns a model's `citation` references for a user's reference list
 -   `update.R`, `restructure.R` - refitting, and bringing fits saved by older versions up to date
 
 ### `R/data_check.R`, `R/bmm_setup.R` {.unnumbered}
