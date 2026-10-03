@@ -315,76 +315,85 @@ window.Quarto = {
 <div class="code-with-filename-file">
 <pre><strong>R/model_imm.R</strong></pre>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1" data-filename="R/model_imm.R" data-bmm-src=".model_imm"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-label="1"></a>.model_imm <span class="ot">&lt;-</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-label="2"></a>  <span class="cf">function</span>(<span class="at">resp_error =</span> <span class="cn">NULL</span>, <span class="at">nt_features =</span> <span class="cn">NULL</span>, <span class="at">nt_distances =</span> <span class="cn">NULL</span>,</span>
-<span id="cb1-3"><a href="#cb1-3" aria-label="3"></a>           <span class="at">set_size =</span> <span class="cn">NULL</span>, <span class="at">regex =</span> <span class="cn">FALSE</span>, <span class="at">version =</span> <span class="st">"full"</span>, <span class="at">links =</span> <span class="cn">NULL</span>,</span>
-<span id="cb1-4"><a href="#cb1-4" aria-label="4"></a>           <span class="at">call =</span> <span class="cn">NULL</span>, ...) {</span>
-<span id="cb1-5"><a href="#cb1-5" aria-label="5"></a>    out <span class="ot">&lt;-</span> <span class="fu">structure</span>(</span>
-<span id="cb1-6"><a href="#cb1-6" aria-label="6"></a>      <span class="fu">list</span>(</span>
-<span id="cb1-7"><a href="#cb1-7" aria-label="7"></a>        <span class="at">resp_vars =</span> <span class="fu">nlist</span>(resp_error),</span>
-<span id="cb1-8"><a href="#cb1-8" aria-label="8"></a>        <span class="at">other_vars =</span> <span class="fu">nlist</span>(nt_features, nt_distances, set_size),</span>
-<span id="cb1-9"><a href="#cb1-9" aria-label="9"></a>        <span class="at">domain =</span> <span class="st">"Visual working memory"</span>,</span>
-<span id="cb1-10"><a href="#cb1-10" aria-label="10"></a>        <span class="at">task =</span> <span class="st">"Continuous reproduction"</span>,</span>
-<span id="cb1-11"><a href="#cb1-11" aria-label="11"></a>        <span class="at">name =</span> <span class="st">"Interference measurement model by Oberauer and Lin (2017)."</span>,</span>
-<span id="cb1-12"><a href="#cb1-12" aria-label="12"></a>        <span class="at">version =</span> version,</span>
-<span id="cb1-13"><a href="#cb1-13" aria-label="13"></a>        <span class="at">citation =</span> <span class="fu">glue</span>(</span>
-<span id="cb1-14"><a href="#cb1-14" aria-label="14"></a>          <span class="st">"Oberauer, K., &amp; Lin, H.Y. (2017). An interference model </span><span class="sc">\\</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-label="15"></a><span class="st">          of visual working memory. Psychological Review, 124(1), 21-59"</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-label="16"></a>        ),</span>
-<span id="cb1-17"><a href="#cb1-17" aria-label="17"></a>        <span class="at">requirements =</span> <span class="fu">glue</span>(</span>
-<span id="cb1-18"><a href="#cb1-18" aria-label="18"></a>          <span class="st">'- The response vairable should be in radians and </span><span class="sc">\\</span></span>
-<span id="cb1-19"><a href="#cb1-19" aria-label="19"></a><span class="st">          represent the angular error relative to the target</span></span>
-<span id="cb1-20"><a href="#cb1-20" aria-label="20"></a><span class="st">          - The non-target features should be in radians and be </span><span class="sc">\\</span></span>
-<span id="cb1-21"><a href="#cb1-21" aria-label="21"></a><span class="st">          centered relative to the target'</span></span>
-<span id="cb1-22"><a href="#cb1-22" aria-label="22"></a>        ),</span>
-<span id="cb1-23"><a href="#cb1-23" aria-label="23"></a>        <span class="at">parameters =</span> <span class="fu">list</span>(</span>
-<span id="cb1-24"><a href="#cb1-24" aria-label="24"></a>          <span class="at">mu1 =</span> <span class="fu">glue</span>(</span>
-<span id="cb1-25"><a href="#cb1-25" aria-label="25"></a>            <span class="st">"Location parameter of the von Mises distribution for memory </span><span class="sc">\\</span></span>
-<span id="cb1-26"><a href="#cb1-26" aria-label="26"></a><span class="st">            responses (in radians). Fixed internally to 0 by default."</span></span>
-<span id="cb1-27"><a href="#cb1-27" aria-label="27"></a>          ),</span>
-<span id="cb1-28"><a href="#cb1-28" aria-label="28"></a>          <span class="at">kappa =</span> <span class="st">"Concentration parameter of the von Mises distribution"</span>,</span>
-<span id="cb1-29"><a href="#cb1-29" aria-label="29"></a>          <span class="at">a =</span> <span class="st">"General activation of memory items"</span>,</span>
-<span id="cb1-30"><a href="#cb1-30" aria-label="30"></a>          <span class="at">c =</span> <span class="st">"Context activation"</span>,</span>
-<span id="cb1-31"><a href="#cb1-31" aria-label="31"></a>          <span class="at">s =</span> <span class="st">"Spatial similarity gradient"</span></span>
-<span id="cb1-32"><a href="#cb1-32" aria-label="32"></a>        ),</span>
-<span id="cb1-33"><a href="#cb1-33" aria-label="33"></a>        <span class="at">links =</span> <span class="fu">list</span>(</span>
-<span id="cb1-34"><a href="#cb1-34" aria-label="34"></a>          <span class="at">mu1 =</span> <span class="st">"tan_half"</span>,</span>
-<span id="cb1-35"><a href="#cb1-35" aria-label="35"></a>          <span class="at">kappa =</span> <span class="st">"log"</span>,</span>
-<span id="cb1-36"><a href="#cb1-36" aria-label="36"></a>          <span class="at">a =</span> <span class="st">"log"</span>,</span>
-<span id="cb1-37"><a href="#cb1-37" aria-label="37"></a>          <span class="at">c =</span> <span class="st">"log"</span>,</span>
-<span id="cb1-38"><a href="#cb1-38" aria-label="38"></a>          <span class="at">s =</span> <span class="st">"log"</span></span>
-<span id="cb1-39"><a href="#cb1-39" aria-label="39"></a>        ),</span>
-<span id="cb1-40"><a href="#cb1-40" aria-label="40"></a>        <span class="at">fixed_parameters =</span> <span class="fu">list</span>(<span class="at">mu1 =</span> <span class="dv">0</span>, <span class="at">mu2 =</span> <span class="dv">0</span>, <span class="at">kappa2 =</span> <span class="sc">-</span><span class="dv">100</span>),</span>
-<span id="cb1-41"><a href="#cb1-41" aria-label="41"></a>        <span class="at">default_priors =</span> <span class="fu">list</span>(</span>
-<span id="cb1-42"><a href="#cb1-42" aria-label="42"></a>          <span class="at">mu1 =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"student_t(1, 0, 1)"</span>),</span>
-<span id="cb1-43"><a href="#cb1-43" aria-label="43"></a>          <span class="at">kappa =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(2, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>),</span>
-<span id="cb1-44"><a href="#cb1-44" aria-label="44"></a>          <span class="at">a =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>),</span>
-<span id="cb1-45"><a href="#cb1-45" aria-label="45"></a>          <span class="at">c =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>),</span>
-<span id="cb1-46"><a href="#cb1-46" aria-label="46"></a>          <span class="at">s =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>)</span>
-<span id="cb1-47"><a href="#cb1-47" aria-label="47"></a>        )</span>
-<span id="cb1-48"><a href="#cb1-48" aria-label="48"></a>      ),</span>
-<span id="cb1-49"><a href="#cb1-49" aria-label="49"></a>      <span class="co"># attributes</span></span>
-<span id="cb1-50"><a href="#cb1-50" aria-label="50"></a>      <span class="at">regex =</span> regex,</span>
-<span id="cb1-51"><a href="#cb1-51" aria-label="51"></a>      <span class="at">regex_vars =</span> <span class="fu">c</span>(<span class="st">'nt_features'</span>, <span class="st">'nt_distances'</span>),</span>
-<span id="cb1-52"><a href="#cb1-52" aria-label="52"></a>      <span class="at">class =</span> <span class="fu">c</span>(<span class="st">"bmmodel"</span>, <span class="st">"circular"</span>, <span class="st">"non_targets"</span>, <span class="st">"imm"</span>, <span class="fu">paste0</span>(<span class="st">'imm_'</span>,version)),</span>
-<span id="cb1-53"><a href="#cb1-53" aria-label="53"></a>      <span class="at">call =</span> call</span>
-<span id="cb1-54"><a href="#cb1-54" aria-label="54"></a>    )</span>
-<span id="cb1-55"><a href="#cb1-55" aria-label="55"></a></span>
-<span id="cb1-56"><a href="#cb1-56" aria-label="56"></a>    <span class="co"># add version specific information</span></span>
-<span id="cb1-57"><a href="#cb1-57" aria-label="57"></a>    <span class="cf">if</span> (version <span class="sc">==</span> <span class="st">"abc"</span>) {</span>
-<span id="cb1-58"><a href="#cb1-58" aria-label="58"></a>      out<span class="sc">$</span>parameters<span class="sc">$</span>s <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb1-59"><a href="#cb1-59" aria-label="59"></a>      out<span class="sc">$</span>links<span class="sc">$</span>s <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb1-60"><a href="#cb1-60" aria-label="60"></a>      out<span class="sc">$</span>default_priors<span class="sc">$</span>s <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb1-61"><a href="#cb1-61" aria-label="61"></a>      <span class="fu">attributes</span>(out)<span class="sc">$</span>regex_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">'nt_features'</span>)</span>
-<span id="cb1-62"><a href="#cb1-62" aria-label="62"></a>    } <span class="cf">else</span> <span class="cf">if</span> (version <span class="sc">==</span> <span class="st">"bsc"</span>) {</span>
-<span id="cb1-63"><a href="#cb1-63" aria-label="63"></a>      out<span class="sc">$</span>parameters<span class="sc">$</span>a <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb1-64"><a href="#cb1-64" aria-label="64"></a>      out<span class="sc">$</span>links<span class="sc">$</span>a <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb1-65"><a href="#cb1-65" aria-label="65"></a>      out<span class="sc">$</span>default_priors<span class="sc">$</span>a <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb1-66"><a href="#cb1-66" aria-label="66"></a>    }</span>
-<span id="cb1-67"><a href="#cb1-67" aria-label="67"></a></span>
-<span id="cb1-68"><a href="#cb1-68" aria-label="68"></a>    out<span class="sc">$</span>links[<span class="fu">names</span>(links)] <span class="ot">&lt;-</span> links</span>
-<span id="cb1-69"><a href="#cb1-69" aria-label="69"></a>    out</span>
-<span id="cb1-70"><a href="#cb1-70" aria-label="70"></a>  }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1" data-filename="R/model_imm.R" data-bmm-src=".model_imm"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-label="1"></a>.model_imm <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">resp_error =</span> <span class="cn">NULL</span>, <span class="at">nt_features =</span> <span class="cn">NULL</span>, <span class="at">nt_distances =</span> <span class="cn">NULL</span>,</span>
+<span id="cb1-2"><a href="#cb1-2" aria-label="2"></a>                       <span class="at">set_size =</span> <span class="cn">NULL</span>, <span class="at">regex =</span> <span class="cn">FALSE</span>, <span class="at">version =</span> <span class="st">"full"</span>, <span class="at">links =</span> <span class="cn">NULL</span>,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-label="3"></a>                       <span class="at">call =</span> <span class="cn">NULL</span>, ...) {</span>
+<span id="cb1-4"><a href="#cb1-4" aria-label="4"></a>  out <span class="ot">&lt;-</span> <span class="fu">structure</span>(</span>
+<span id="cb1-5"><a href="#cb1-5" aria-label="5"></a>    <span class="fu">list</span>(</span>
+<span id="cb1-6"><a href="#cb1-6" aria-label="6"></a>      <span class="at">resp_vars =</span> <span class="fu">nlist</span>(resp_error),</span>
+<span id="cb1-7"><a href="#cb1-7" aria-label="7"></a>      <span class="at">other_vars =</span> <span class="fu">nlist</span>(nt_features, nt_distances, set_size),</span>
+<span id="cb1-8"><a href="#cb1-8" aria-label="8"></a>      <span class="at">domain =</span> <span class="st">"Visual working memory"</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-label="9"></a>      <span class="at">task =</span> <span class="st">"Continuous reproduction"</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-label="10"></a>      <span class="at">name =</span> <span class="st">"Interference measurement model by Oberauer and Lin (2017)."</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-label="11"></a>      <span class="at">citation =</span> <span class="fu">glue</span>(</span>
+<span id="cb1-12"><a href="#cb1-12" aria-label="12"></a>        <span class="st">"Oberauer, K., &amp; Lin, H.Y. (2017). An interference model </span><span class="sc">\\</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-label="13"></a><span class="st">          of visual working memory. Psychological Review, 124(1), 21-59"</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-label="14"></a>      ),</span>
+<span id="cb1-15"><a href="#cb1-15" aria-label="15"></a>      <span class="at">version =</span> version,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-label="16"></a>      <span class="at">requirements =</span> <span class="fu">glue</span>(</span>
+<span id="cb1-17"><a href="#cb1-17" aria-label="17"></a>        <span class="st">"- The response vairable should be in radians and </span><span class="sc">\\</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-label="18"></a><span class="st">          represent the angular error relative to the target</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-label="19"></a><span class="st">          - The non-target features should be in radians and be </span><span class="sc">\\</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-label="20"></a><span class="st">          centered relative to the target"</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-label="21"></a>      ),</span>
+<span id="cb1-22"><a href="#cb1-22" aria-label="22"></a>      <span class="at">parameters =</span> <span class="fu">list</span>(</span>
+<span id="cb1-23"><a href="#cb1-23" aria-label="23"></a>        <span class="at">mu1 =</span> <span class="fu">glue</span>(</span>
+<span id="cb1-24"><a href="#cb1-24" aria-label="24"></a>          <span class="st">"Location parameter of the von Mises distribution for memory </span><span class="sc">\\</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-label="25"></a><span class="st">            responses (in radians). Fixed internally to 0 by default."</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-label="26"></a>        ),</span>
+<span id="cb1-27"><a href="#cb1-27" aria-label="27"></a>        <span class="at">kappa =</span> <span class="st">"Concentration parameter of the von Mises distribution"</span>,</span>
+<span id="cb1-28"><a href="#cb1-28" aria-label="28"></a>        <span class="at">a =</span> <span class="st">"General activation of memory items"</span>,</span>
+<span id="cb1-29"><a href="#cb1-29" aria-label="29"></a>        <span class="at">c =</span> <span class="st">"Context activation"</span>,</span>
+<span id="cb1-30"><a href="#cb1-30" aria-label="30"></a>        <span class="at">s =</span> <span class="st">"Spatial similarity gradient"</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-label="31"></a>      ),</span>
+<span id="cb1-32"><a href="#cb1-32" aria-label="32"></a>      <span class="at">links =</span> <span class="fu">list</span>(</span>
+<span id="cb1-33"><a href="#cb1-33" aria-label="33"></a>        <span class="at">mu1 =</span> <span class="st">"tan_half"</span>,</span>
+<span id="cb1-34"><a href="#cb1-34" aria-label="34"></a>        <span class="at">kappa =</span> <span class="st">"log"</span>,</span>
+<span id="cb1-35"><a href="#cb1-35" aria-label="35"></a>        <span class="at">a =</span> <span class="st">"log"</span>,</span>
+<span id="cb1-36"><a href="#cb1-36" aria-label="36"></a>        <span class="at">c =</span> <span class="st">"log"</span>,</span>
+<span id="cb1-37"><a href="#cb1-37" aria-label="37"></a>        <span class="at">s =</span> <span class="st">"log"</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-label="38"></a>      ),</span>
+<span id="cb1-39"><a href="#cb1-39" aria-label="39"></a>      <span class="at">fixed_parameters =</span> <span class="fu">list</span>(<span class="at">mu1 =</span> <span class="dv">0</span>, <span class="at">mu2 =</span> <span class="dv">0</span>, <span class="at">kappa2 =</span> <span class="sc">-</span><span class="dv">100</span>),</span>
+<span id="cb1-40"><a href="#cb1-40" aria-label="40"></a>      <span class="at">default_priors =</span> <span class="fu">list</span>(</span>
+<span id="cb1-41"><a href="#cb1-41" aria-label="41"></a>        <span class="at">mu1 =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 0.25)"</span>, <span class="at">sd =</span> <span class="st">"exponential(4)"</span>),</span>
+<span id="cb1-42"><a href="#cb1-42" aria-label="42"></a>        <span class="at">kappa =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(2, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">sd =</span> <span class="st">"exponential(1)"</span>),</span>
+<span id="cb1-43"><a href="#cb1-43" aria-label="43"></a>        <span class="at">a =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">sd =</span> <span class="st">"exponential(1)"</span>),</span>
+<span id="cb1-44"><a href="#cb1-44" aria-label="44"></a>        <span class="at">c =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">sd =</span> <span class="st">"exponential(1)"</span>),</span>
+<span id="cb1-45"><a href="#cb1-45" aria-label="45"></a>        <span class="at">s =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">sd =</span> <span class="st">"exponential(1)"</span>)</span>
+<span id="cb1-46"><a href="#cb1-46" aria-label="46"></a>      ),</span>
+<span id="cb1-47"><a href="#cb1-47" aria-label="47"></a>      <span class="co"># central 50% of the main default prior on the native scale</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-label="48"></a>      <span class="at">init_ranges =</span> <span class="fu">list</span>(</span>
+<span id="cb1-49"><a href="#cb1-49" aria-label="49"></a>        <span class="at">mu1 =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.65</span>, <span class="fl">0.65</span>),</span>
+<span id="cb1-50"><a href="#cb1-50" aria-label="50"></a>        <span class="at">kappa =</span> <span class="fu">c</span>(<span class="fl">3.8</span>, <span class="dv">15</span>),</span>
+<span id="cb1-51"><a href="#cb1-51" aria-label="51"></a>        <span class="at">a =</span> <span class="fu">c</span>(<span class="fl">0.51</span>, <span class="dv">2</span>),</span>
+<span id="cb1-52"><a href="#cb1-52" aria-label="52"></a>        <span class="at">c =</span> <span class="fu">c</span>(<span class="fl">0.51</span>, <span class="dv">2</span>),</span>
+<span id="cb1-53"><a href="#cb1-53" aria-label="53"></a>        <span class="at">s =</span> <span class="fu">c</span>(<span class="fl">0.51</span>, <span class="dv">2</span>)</span>
+<span id="cb1-54"><a href="#cb1-54" aria-label="54"></a>      )</span>
+<span id="cb1-55"><a href="#cb1-55" aria-label="55"></a>    ),</span>
+<span id="cb1-56"><a href="#cb1-56" aria-label="56"></a>    <span class="co"># attributes</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-label="57"></a>    <span class="at">regex =</span> regex,</span>
+<span id="cb1-58"><a href="#cb1-58" aria-label="58"></a>    <span class="at">regex_vars =</span> <span class="fu">c</span>(<span class="st">"nt_features"</span>, <span class="st">"nt_distances"</span>),</span>
+<span id="cb1-59"><a href="#cb1-59" aria-label="59"></a>    <span class="at">class =</span> <span class="fu">c</span>(<span class="st">"bmmodel"</span>, <span class="st">"circular"</span>, <span class="st">"non_targets"</span>, <span class="st">"imm"</span>, <span class="fu">paste0</span>(<span class="st">"imm_"</span>, version)),</span>
+<span id="cb1-60"><a href="#cb1-60" aria-label="60"></a>    <span class="at">call =</span> call</span>
+<span id="cb1-61"><a href="#cb1-61" aria-label="61"></a>  )</span>
+<span id="cb1-62"><a href="#cb1-62" aria-label="62"></a></span>
+<span id="cb1-63"><a href="#cb1-63" aria-label="63"></a>  <span class="co"># add version specific information</span></span>
+<span id="cb1-64"><a href="#cb1-64" aria-label="64"></a>  <span class="cf">if</span> (version <span class="sc">==</span> <span class="st">"abc"</span>) {</span>
+<span id="cb1-65"><a href="#cb1-65" aria-label="65"></a>    out<span class="sc">$</span>parameters<span class="sc">$</span>s <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-label="66"></a>    out<span class="sc">$</span>links<span class="sc">$</span>s <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-label="67"></a>    out<span class="sc">$</span>default_priors<span class="sc">$</span>s <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-68"><a href="#cb1-68" aria-label="68"></a>    out<span class="sc">$</span>init_ranges<span class="sc">$</span>s <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-69"><a href="#cb1-69" aria-label="69"></a>    <span class="fu">attributes</span>(out)<span class="sc">$</span>regex_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"nt_features"</span>)</span>
+<span id="cb1-70"><a href="#cb1-70" aria-label="70"></a>  } <span class="cf">else</span> <span class="cf">if</span> (version <span class="sc">==</span> <span class="st">"bsc"</span>) {</span>
+<span id="cb1-71"><a href="#cb1-71" aria-label="71"></a>    out<span class="sc">$</span>parameters<span class="sc">$</span>a <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-72"><a href="#cb1-72" aria-label="72"></a>    out<span class="sc">$</span>links<span class="sc">$</span>a <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-73"><a href="#cb1-73" aria-label="73"></a>    out<span class="sc">$</span>default_priors<span class="sc">$</span>a <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-74"><a href="#cb1-74" aria-label="74"></a>    out<span class="sc">$</span>init_ranges<span class="sc">$</span>a <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-75"><a href="#cb1-75" aria-label="75"></a>  }</span>
+<span id="cb1-76"><a href="#cb1-76" aria-label="76"></a></span>
+<span id="cb1-77"><a href="#cb1-77" aria-label="77"></a>  out <span class="ot">&lt;-</span> <span class="fu">set_links</span>(out, links)</span>
+<span id="cb1-78"><a href="#cb1-78" aria-label="78"></a>  out</span>
+<span id="cb1-79"><a href="#cb1-79" aria-label="79"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Here is a brief explanation of the different components of the model definition:</p>
 <p><code>resp_vars</code>: a list of response variables that the model will be fitted to. These variables will be used to construct the <code>brmsformula</code> passed to <code>brms</code> together with the <code>bmmformula</code> and the <code>parameters</code> of the model. The user has to provide these variables in the data frame that is passed to the <code>bmm()</code> function</p>
@@ -392,9 +401,10 @@ window.Quarto = {
 <p><code>domain, task, name, citation, requirements</code>: contains information about the model, such as the domain, task, name, citation, requirements. This information is used for generating help pages</p>
 <p><code>version:</code> if the model has multiple versions, this argument is specified by the user. Then it is used to dynamically adjust some information in the model object. In the case of the <code>imm</code> model, we have three versions - <code>full</code>, <code>bsc</code> and <code>abc</code>. As you can see at the end of the script, some parameters are deleted depending on the model version.</p>
 <p><code>parameters:</code> contains a named list of all parameters in the model that can be estimated by the user and their description. This information is used internally to check if the <code>bmmformula</code> contains linear model formulas for all model parameters, and to decide what information to include in the summary of <code>bmmfit</code> objects.</p>
-<p><code>links:</code> a named list providing the link function for each parameter. For example, <code>kappa</code> in the <code>imm</code> models has to be positive, so it is sampled on the log scale. This information is used in defining the model family and for the summary methods. If you want the user to be able to specify custom link functions, the next to last line of the script replaces the links with those provided by the user</p>
+<p><code>links:</code> a named list providing the link function for each parameter. For example, <code>kappa</code> in the <code>imm</code> models has to be positive, so it is sampled on the log scale. This information is used in defining the model family and for the summary methods. The next to last line, <code>set_links()</code>, applies and validates links the user passes. The IMM builds its links into the mixture family and the non-linear formulas, so it declares <code>settable_links.imm()</code> returning <code>character(0)</code>, and any link a user passes is refused (see <a href="bmm-architecture.html#sec-links" class="quarto-xref"><span>Section 3.3.1</span></a>)</p>
 <p><code>fixed_parameters</code> in the <code>imm</code> several parameters are fixed to constant values internally to identify the model. Only one of them, <code>mu1</code> is also part of the <code>parameters</code> block - this is the only fixed parameters that users can choose to estimate instead of leaving it fixed. <code>mu2</code> and <code>kappa2</code> cannot be freely estimated.</p>
-<p><code>default_priors</code> a list of lists for each parameter in the model. Each prior has two components: <code>main</code>, the prior that will be put on the Intercept or on each level of a factor if the intercept is suppressed; <code>effects</code>, the prior to put on the regression coefficients relative to the intercept. The priors are described as in the <code>set_prior</code> function from <code>brms</code>. This information is used by the <code>configure_prior()</code> S3 method to automatically set the default priors for the model. The priors that you put here will be used by <code>bmm()</code> unless the users chooses to overwrite them.</p>
+<p><code>default_priors</code> a list of lists for each parameter in the model. Each prior has three components: <code>main</code>, the prior that will be put on the Intercept or on each level of a factor if the intercept is suppressed; <code>effects</code>, the prior to put on the regression coefficients relative to the intercept; and <code>sd</code>, the prior on the standard deviations of random effects. The priors are described as in the <code>set_prior</code> function from <code>brms</code>. This information is used by the <code>configure_prior()</code> S3 method to automatically set the default priors for the model. The priors that you put here will be used by <code>bmm()</code> unless the users chooses to overwrite them.</p>
+<p><code>init_ranges</code>: a range on the native scale for each parameter’s initial values. The IMM’s are the central 50% of each parameter’s <code>main</code> prior; see the architecture chapter for how they are used.</p>
 <p><code>regex:</code> For the <code>imm</code> models, the <code>nt_features</code> and <code>nt_distances</code> variables can be specified with regular expressions, if the user sets <code>regex = TRUE</code></p>
 <p><code>call</code>: this automatically records how the model was called so that the call can be printed in the summary after fitting. Leave it as is.</p>
 <p><code>class</code>: is the most important part. It contains the class of the model. This is used by generic S3 methods to perform data checks and model configuration. The classes should be ordered from most general to most specific. A general class exists when the same operations can be performed on multiple models. For example, the ‘3p’, ‘imm_abc’, ‘imm_bsc’ and ‘imm_full’ models all have non-targets and set_size arguments, so the same data checks can be performed on all of them, represented by the class <code>non_targets</code>. The first class should always be <code>bmmodel</code>, which is the main class for all models. The last class should be the specific model name, in this case <code>imm_full</code>, <code>imm_abc</code> or <code>imm_bsc</code>, which is automatically constructed if a <code>version</code> argument is provided. Otherwise the last class will be just the name of the model.</p>
@@ -503,19 +513,24 @@ window.Quarto = {
 <span id="cb2-95"><a href="#cb2-95" aria-label="95"></a><span class="co">#'            cores = 4,</span></span>
 <span id="cb2-96"><a href="#cb2-96" aria-label="96"></a><span class="co">#'            backend = 'cmdstanr')</span></span>
 <span id="cb2-97"><a href="#cb2-97" aria-label="97"></a><span class="co">#' @export</span></span>
-<span id="cb2-98"><a href="#cb2-98" aria-label="98"></a>imm <span class="ot">&lt;-</span> <span class="cf">function</span>(resp_error, nt_features, nt_distances, set_size, <span class="at">regex =</span> <span class="cn">FALSE</span>, <span class="at">version =</span> <span class="st">"full"</span>, ...) {</span>
-<span id="cb2-99"><a href="#cb2-99" aria-label="99"></a>  call <span class="ot">&lt;-</span> <span class="fu">match.call</span>()</span>
-<span id="cb2-100"><a href="#cb2-100" aria-label="100"></a>  dots <span class="ot">&lt;-</span> <span class="fu">list</span>(...)</span>
-<span id="cb2-101"><a href="#cb2-101" aria-label="101"></a>  <span class="cf">if</span> (<span class="st">"setsize"</span> <span class="sc">%in%</span> <span class="fu">names</span>(dots)) {</span>
-<span id="cb2-102"><a href="#cb2-102" aria-label="102"></a>    set_size <span class="ot">&lt;-</span> dots<span class="sc">$</span>setsize</span>
-<span id="cb2-103"><a href="#cb2-103" aria-label="103"></a>    <span class="fu">warning2</span>(<span class="st">"The argument 'setsize' is deprecated. Please use 'set_size' instead."</span>)</span>
-<span id="cb2-104"><a href="#cb2-104" aria-label="104"></a>  }</span>
-<span id="cb2-105"><a href="#cb2-105" aria-label="105"></a>  <span class="cf">if</span> (version <span class="sc">==</span> <span class="st">"abc"</span>) nt_distances <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb2-106"><a href="#cb2-106" aria-label="106"></a>  <span class="fu">stop_missing_args</span>()</span>
-<span id="cb2-107"><a href="#cb2-107" aria-label="107"></a>  <span class="fu">.model_imm</span>(<span class="at">resp_error =</span> resp_error, <span class="at">nt_features =</span> nt_features,</span>
-<span id="cb2-108"><a href="#cb2-108" aria-label="108"></a>             <span class="at">nt_distances =</span> nt_distances, <span class="at">set_size =</span> set_size, <span class="at">regex =</span> regex,</span>
-<span id="cb2-109"><a href="#cb2-109" aria-label="109"></a>             <span class="at">version =</span> version, <span class="at">call =</span> call, ...)</span>
-<span id="cb2-110"><a href="#cb2-110" aria-label="110"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb2-98"><a href="#cb2-98" aria-label="98"></a>imm <span class="ot">&lt;-</span> <span class="cf">function</span>(resp_error, nt_features, nt_distances, set_size, <span class="at">regex =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb2-99"><a href="#cb2-99" aria-label="99"></a>                <span class="at">version =</span> <span class="fu">c</span>(<span class="st">"full"</span>, <span class="st">"bsc"</span>, <span class="st">"abc"</span>), ...) {</span>
+<span id="cb2-100"><a href="#cb2-100" aria-label="100"></a>  call <span class="ot">&lt;-</span> <span class="fu">match.call</span>()</span>
+<span id="cb2-101"><a href="#cb2-101" aria-label="101"></a>  version <span class="ot">&lt;-</span> <span class="fu">match.arg</span>(version)</span>
+<span id="cb2-102"><a href="#cb2-102" aria-label="102"></a>  dots <span class="ot">&lt;-</span> <span class="fu">list</span>(...)</span>
+<span id="cb2-103"><a href="#cb2-103" aria-label="103"></a>  <span class="cf">if</span> (<span class="st">"setsize"</span> <span class="sc">%in%</span> <span class="fu">names</span>(dots)) {</span>
+<span id="cb2-104"><a href="#cb2-104" aria-label="104"></a>    set_size <span class="ot">&lt;-</span> dots<span class="sc">$</span>setsize</span>
+<span id="cb2-105"><a href="#cb2-105" aria-label="105"></a>    <span class="fu">warning2</span>(<span class="st">"The argument 'setsize' is deprecated. Please use 'set_size' instead."</span>)</span>
+<span id="cb2-106"><a href="#cb2-106" aria-label="106"></a>  }</span>
+<span id="cb2-107"><a href="#cb2-107" aria-label="107"></a>  <span class="cf">if</span> (version <span class="sc">==</span> <span class="st">"abc"</span>) nt_distances <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb2-108"><a href="#cb2-108" aria-label="108"></a>  <span class="fu">stop_missing_args</span>()</span>
+<span id="cb2-109"><a href="#cb2-109" aria-label="109"></a></span>
+<span id="cb2-110"><a href="#cb2-110" aria-label="110"></a>  <span class="fu">.model_imm</span>(</span>
+<span id="cb2-111"><a href="#cb2-111" aria-label="111"></a>    <span class="at">resp_error =</span> resp_error, <span class="at">nt_features =</span> nt_features,</span>
+<span id="cb2-112"><a href="#cb2-112" aria-label="112"></a>    <span class="at">nt_distances =</span> nt_distances, <span class="at">set_size =</span> set_size, <span class="at">regex =</span> regex,</span>
+<span id="cb2-113"><a href="#cb2-113" aria-label="113"></a>    <span class="at">version =</span> version, <span class="at">call =</span> call, ...</span>
+<span id="cb2-114"><a href="#cb2-114" aria-label="114"></a>  )</span>
+<span id="cb2-115"><a href="#cb2-115" aria-label="115"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>The details will be filled out automatically from the model definition. This does some fancy formatting to include documentation about all versions of the model in the same help file.</p>
 </section>
@@ -656,7 +671,7 @@ window.Quarto = {
 </div>
 <p>Read the dispatch order carefully here, because it is the reverse of what the names suggest. <code>bmf2bf()</code> is called with the model object, whose class vector starts with <code>"bmmodel"</code>, so <code>bmf2bf.bmmodel</code> runs <strong>first</strong>. Its <code>NextMethod("bmf2bf")</code> walks on to the rest of the chain, and only reaches <code>bmf2bf.default</code> if no model-specific method intercepted.</p>
 <p>That is why <code>bmf2bf.default</code> returns <code>NULL</code> rather than a formula. It means “nobody claimed the first line”. <code>bmf2bf.bmmodel</code> sees the <code>NULL</code>, falls through the <code>%||%</code>, and builds the single-response first line <code>resp ~ 1</code> itself. A model with several response variables, or one needing <code>vreal()</code>, <code>vint()</code> or <code>trials()</code>, defines <code>bmf2bf.mymodel</code> that returns the first line it wants; <code>NextMethod()</code> then returns that instead of <code>NULL</code> and the <code>%||%</code> fallback never fires.</p>
-<p>Once the first line exists, the rest is mechanical: each parameter formula becomes <code>brms::nlf()</code> if it is marked non-linear and <code>brms::lf()</code> otherwise, and <code>Reduce()</code> adds them all to the base formula. Whether a component is marked non-linear is decided in <code>assign_nl_attr()</code> (<code>R/bmmformula.R:375-382</code>) purely by whether one of its predictors is also a predicted parameter — which is the mechanism behind the name-clash warning described in the next chapter.</p>
+<p>Once the first line exists, the rest is mechanical: each parameter formula becomes <code>brms::nlf()</code> if it is marked non-linear and <code>brms::lf()</code> otherwise, and <code>Reduce()</code> adds them all to the base formula. Whether a component is marked non-linear is decided in <code>assign_nl_attr()</code> purely by whether one of its predictors is also a predicted parameter — which is the mechanism behind the name-clash warning described in the next chapter.</p>
 <p>This conversion from a <code>bmmformula</code> object into a <code>brmsformula</code> object is done to avoid users having to specify complicated and long formulas or specifying all additional response information in the <code>brmsformula</code> themselves. For more detailed information on the use of additional response information in a <code>brmsformula</code> please see the <code>brmsformula</code> <a href="https://rdrr.io/cran/brms/man/brmsformula.html">documentation</a>.</p>
 </section>
 </section>
@@ -699,24 +714,24 @@ window.Quarto = {
 <span id="cb7-28"><a href="#cb7-28" aria-label="28"></a>      ),</span>
 <span id="cb7-29"><a href="#cb7-29" aria-label="29"></a>      <span class="at">fixed_parameters =</span> <span class="fu">list</span>(<span class="at">mu =</span> <span class="dv">0</span>),</span>
 <span id="cb7-30"><a href="#cb7-30" aria-label="30"></a>      <span class="at">default_priors =</span> <span class="fu">list</span>(</span>
-<span id="cb7-31"><a href="#cb7-31" aria-label="31"></a>        <span class="at">mu =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"student_t(1, 0, 1)"</span>),</span>
-<span id="cb7-32"><a href="#cb7-32" aria-label="32"></a>        <span class="at">kappa =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"student_t(5, 1.75, 0.75)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>),</span>
-<span id="cb7-33"><a href="#cb7-33" aria-label="33"></a>        <span class="at">c =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"student_t(5, 2, 0.75)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>)</span>
+<span id="cb7-31"><a href="#cb7-31" aria-label="31"></a>        <span class="at">mu =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0, 0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 0.25)"</span>, <span class="at">sd =</span> <span class="st">"exponential(4)"</span>),</span>
+<span id="cb7-32"><a href="#cb7-32" aria-label="32"></a>        <span class="at">kappa =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"student_t(5, 1.75, 0.75)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">sd =</span> <span class="st">"exponential(1)"</span>),</span>
+<span id="cb7-33"><a href="#cb7-33" aria-label="33"></a>        <span class="at">c =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"student_t(5, 2, 0.75)"</span>, <span class="at">effects =</span> <span class="st">"normal(0, 1)"</span>, <span class="at">sd =</span> <span class="st">"exponential(1)"</span>)</span>
 <span id="cb7-34"><a href="#cb7-34" aria-label="34"></a>      ),</span>
 <span id="cb7-35"><a href="#cb7-35" aria-label="35"></a>      <span class="at">init_ranges =</span> <span class="fu">list</span>(</span>
-<span id="cb7-36"><a href="#cb7-36" aria-label="36"></a>        <span class="at">mu =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.5</span>, <span class="fl">0.5</span>),</span>
-<span id="cb7-37"><a href="#cb7-37" aria-label="37"></a>        <span class="at">kappa =</span> <span class="fu">c</span>(<span class="fl">2.5</span>, <span class="fl">3.5</span>),</span>
-<span id="cb7-38"><a href="#cb7-38" aria-label="38"></a>        <span class="at">c =</span> <span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">6</span>)</span>
+<span id="cb7-36"><a href="#cb7-36" aria-label="36"></a>        <span class="at">mu =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.5</span>,<span class="fl">0.5</span>),</span>
+<span id="cb7-37"><a href="#cb7-37" aria-label="37"></a>        <span class="at">kappa =</span> <span class="fu">c</span>(<span class="fl">2.5</span>,<span class="fl">3.5</span>),</span>
+<span id="cb7-38"><a href="#cb7-38" aria-label="38"></a>        <span class="at">c =</span> <span class="fu">c</span>(<span class="dv">4</span>,<span class="dv">6</span>)</span>
 <span id="cb7-39"><a href="#cb7-39" aria-label="39"></a>      )</span>
 <span id="cb7-40"><a href="#cb7-40" aria-label="40"></a>    ),</span>
 <span id="cb7-41"><a href="#cb7-41" aria-label="41"></a>    <span class="at">class =</span> <span class="fu">c</span>(<span class="st">"bmmodel"</span>, <span class="st">"circular"</span>, <span class="st">"sdm"</span>, <span class="fu">paste0</span>(<span class="st">"sdm_"</span>, version)),</span>
 <span id="cb7-42"><a href="#cb7-42" aria-label="42"></a>    <span class="at">call =</span> call</span>
 <span id="cb7-43"><a href="#cb7-43" aria-label="43"></a>  )</span>
-<span id="cb7-44"><a href="#cb7-44" aria-label="44"></a>  out<span class="sc">$</span>links[<span class="fu">names</span>(links)] <span class="ot">&lt;-</span> links</span>
+<span id="cb7-44"><a href="#cb7-44" aria-label="44"></a>  out <span class="ot">&lt;-</span> <span class="fu">set_links</span>(out, links)</span>
 <span id="cb7-45"><a href="#cb7-45" aria-label="45"></a>  out</span>
 <span id="cb7-46"><a href="#cb7-46" aria-label="46"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<p>Note that compared to the earlier IMM example, the SDM model now includes <code>init_ranges</code>. This provides initial value ranges for MCMC sampling, which the <code>create_initfun()</code> step uses to generate appropriate starting values. The SDM model benefits from custom initialization because its custom Stan likelihood can be sensitive to extreme starting values.</p>
+<p>Like the IMM, the SDM sets <code>init_ranges</code>, which <code>create_initfun()</code> uses to generate starting values. Here they are hand-set rather than derived from the priors.</p>
 <p>The model definition is similar to the IMM model, but the SDM model only requires the user to specify the response error, but not additional variables such as non-target variables. The <code>class</code> is also different, as the SDM model is not a subclass of the IMM model. We’ll skip the alias for the SDM model, as it is similar for every model.</p>
 </section>
 <section id="check_data-methods-1" class="level3" data-number="4.2.2">
@@ -735,7 +750,7 @@ window.Quarto = {
 <span id="cb8-7"><a href="#cb8-7" aria-label="7"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>This is a compact example of the attribute bridge. Having sorted the data, the method computes where each run of identical predictor values starts and how long it is — the information the Stan likelihood needs to compute its normalizing constant once per run rather than once per row — and hangs the result on the data frame as <code>sdm_run_metadata</code>. <code>configure_model.sdm</code> reads it back out a few pipeline steps later. The computation itself is a separate function, <code>sdm_run_metadata()</code>, and that matters: it is the reason <code>configure_model.sdm</code> can recompute the metadata when it is called directly and the attribute is absent.</p>
-<p>One detail in that function is worth copying. brms drops rows with missing values in any model variable before fitting, so run boundaries computed on the full data frame would not line up with the rows Stan actually sees. <code>sdm_run_metadata()</code> therefore applies <code>stats::complete.cases()</code> over the response and predictor columns before computing the runs (<code>R/model_sdm.R:202-211</code>). Any index you precompute in <code>check_data</code> and pass through to Stan has the same problem.</p>
+<p>One detail in that function is worth copying. brms drops rows with missing values in any model variable before fitting, so run boundaries computed on the full data frame would not line up with the rows Stan actually sees. <code>sdm_run_metadata()</code> therefore applies <code>stats::complete.cases()</code> over the response and predictor columns before computing the runs. Any index you precompute in <code>check_data</code> and pass through to Stan has the same problem.</p>
 </section>
 <section id="configure_model-methods-1" class="level3" data-number="4.2.3">
 <h3 data-number="4.2.3" class="anchored" data-anchor-id="configure_model-methods-1"><span class="header-section-number">4.2.3</span> configure_model() methods</h3>
@@ -755,49 +770,49 @@ window.Quarto = {
 <span id="cb9-9"><a href="#cb9-9" aria-label="9"></a>    <span class="at">ub =</span> <span class="fu">c</span>(<span class="cn">NA</span>, <span class="cn">NA</span>, <span class="cn">NA</span>),</span>
 <span id="cb9-10"><a href="#cb9-10" aria-label="10"></a>    <span class="at">type =</span> <span class="st">"real"</span>, <span class="at">loop =</span> <span class="cn">FALSE</span>,</span>
 <span id="cb9-11"><a href="#cb9-11" aria-label="11"></a>    <span class="at">log_lik =</span> log_lik_sdm_simple,</span>
-<span id="cb9-12"><a href="#cb9-12" aria-label="12"></a>    <span class="at">posterior_predict =</span> posterior_predict_sdm_simple</span>
-<span id="cb9-13"><a href="#cb9-13" aria-label="13"></a>  )</span>
-<span id="cb9-14"><a href="#cb9-14" aria-label="14"></a></span>
-<span id="cb9-15"><a href="#cb9-15" aria-label="15"></a>  <span class="co"># prepare initial stanvars to pass to brms, model formula and priors</span></span>
-<span id="cb9-16"><a href="#cb9-16" aria-label="16"></a>  sc_path <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">"stan_chunks"</span>, <span class="at">package =</span> <span class="st">"bmm"</span>)</span>
-<span id="cb9-17"><a href="#cb9-17" aria-label="17"></a>  stan_funs <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/sdm_simple_funs.stan"</span>))</span>
-<span id="cb9-18"><a href="#cb9-18" aria-label="18"></a>  stan_tdata <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/sdm_simple_tdata.stan"</span>))</span>
-<span id="cb9-19"><a href="#cb9-19" aria-label="19"></a>  likelihood_file <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">sdm_use_threaded_likelihood</span>()) {</span>
-<span id="cb9-20"><a href="#cb9-20" aria-label="20"></a>    <span class="st">"sdm_simple_likelihood_threaded.stan"</span></span>
-<span id="cb9-21"><a href="#cb9-21" aria-label="21"></a>  } <span class="cf">else</span> {</span>
-<span id="cb9-22"><a href="#cb9-22" aria-label="22"></a>    <span class="st">"sdm_simple_likelihood.stan"</span></span>
-<span id="cb9-23"><a href="#cb9-23" aria-label="23"></a>  }</span>
-<span id="cb9-24"><a href="#cb9-24" aria-label="24"></a>  stan_likelihood <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/"</span>, likelihood_file))</span>
-<span id="cb9-25"><a href="#cb9-25" aria-label="25"></a>  stan_tdata_pll_args <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">sdm_use_threaded_likelihood</span>()) {</span>
-<span id="cb9-26"><a href="#cb9-26" aria-label="26"></a>    <span class="st">"data matrix COSN"</span></span>
-<span id="cb9-27"><a href="#cb9-27" aria-label="27"></a>  }</span>
-<span id="cb9-28"><a href="#cb9-28" aria-label="28"></a>  run_metadata <span class="ot">&lt;-</span> <span class="fu">attr</span>(data, <span class="st">"sdm_run_metadata"</span>)</span>
-<span id="cb9-29"><a href="#cb9-29" aria-label="29"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(run_metadata)) {</span>
-<span id="cb9-30"><a href="#cb9-30" aria-label="30"></a>    <span class="co"># Guard direct configure_model.sdm() calls that bypass check_data.sdm().</span></span>
-<span id="cb9-31"><a href="#cb9-31" aria-label="31"></a>    run_metadata <span class="ot">&lt;-</span> <span class="fu">sdm_run_metadata</span>(data, formula, model)</span>
-<span id="cb9-32"><a href="#cb9-32" aria-label="32"></a>  }</span>
-<span id="cb9-33"><a href="#cb9-33" aria-label="33"></a>  stanvars <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_funs, <span class="at">block =</span> <span class="st">"functions"</span>) <span class="sc">+</span></span>
-<span id="cb9-34"><a href="#cb9-34" aria-label="34"></a>    brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_tdata, <span class="at">block =</span> <span class="st">"tdata"</span>, <span class="at">pll_args =</span> stan_tdata_pll_args) <span class="sc">+</span></span>
-<span id="cb9-35"><a href="#cb9-35" aria-label="35"></a>    brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">x =</span> run_metadata<span class="sc">$</span>G_sdm_runs, <span class="at">name =</span> <span class="st">"G_sdm_runs"</span>) <span class="sc">+</span></span>
-<span id="cb9-36"><a href="#cb9-36" aria-label="36"></a>    <span class="fu">sdm_stanvar_int_array</span>(run_metadata<span class="sc">$</span>sdm_run_start, <span class="st">"sdm_run_start"</span>, <span class="st">"G_sdm_runs"</span>) <span class="sc">+</span></span>
-<span id="cb9-37"><a href="#cb9-37" aria-label="37"></a>    <span class="fu">sdm_stanvar_int_array</span>(run_metadata<span class="sc">$</span>sdm_run_count, <span class="st">"sdm_run_count"</span>, <span class="st">"G_sdm_runs"</span>) <span class="sc">+</span></span>
-<span id="cb9-38"><a href="#cb9-38" aria-label="38"></a>    brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_likelihood, <span class="at">block =</span> <span class="st">"likelihood"</span>, <span class="at">position =</span> <span class="st">"end"</span>)</span>
-<span id="cb9-39"><a href="#cb9-39" aria-label="39"></a></span>
-<span id="cb9-40"><a href="#cb9-40" aria-label="40"></a>  <span class="co"># construct main brms formula from the bmm formula</span></span>
-<span id="cb9-41"><a href="#cb9-41" aria-label="41"></a>  formula <span class="ot">&lt;-</span> <span class="fu">bmf2bf</span>(model, formula)</span>
-<span id="cb9-42"><a href="#cb9-42" aria-label="42"></a>  formula<span class="sc">$</span>family <span class="ot">&lt;-</span> sdm_simple</span>
-<span id="cb9-43"><a href="#cb9-43" aria-label="43"></a></span>
-<span id="cb9-44"><a href="#cb9-44" aria-label="44"></a>  <span class="co"># return the list</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-label="12"></a>    <span class="at">posterior_predict =</span> posterior_predict_sdm_simple,</span>
+<span id="cb9-13"><a href="#cb9-13" aria-label="13"></a>    <span class="at">posterior_epred =</span> posterior_epred_sdm_simple</span>
+<span id="cb9-14"><a href="#cb9-14" aria-label="14"></a>  )</span>
+<span id="cb9-15"><a href="#cb9-15" aria-label="15"></a></span>
+<span id="cb9-16"><a href="#cb9-16" aria-label="16"></a>  <span class="co"># prepare initial stanvars to pass to brms, model formula and priors</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-label="17"></a>  sc_path <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">"stan_chunks"</span>, <span class="at">package =</span> <span class="st">"bmm"</span>)</span>
+<span id="cb9-18"><a href="#cb9-18" aria-label="18"></a>  stan_funs <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/sdm_simple_funs.stan"</span>))</span>
+<span id="cb9-19"><a href="#cb9-19" aria-label="19"></a>  stan_tdata <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/sdm_simple_tdata.stan"</span>))</span>
+<span id="cb9-20"><a href="#cb9-20" aria-label="20"></a>  likelihood_file <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">brms_slices_likelihood</span>()) {</span>
+<span id="cb9-21"><a href="#cb9-21" aria-label="21"></a>    <span class="st">"sdm_simple_likelihood_threaded.stan"</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-label="22"></a>  } <span class="cf">else</span> {</span>
+<span id="cb9-23"><a href="#cb9-23" aria-label="23"></a>    <span class="st">"sdm_simple_likelihood.stan"</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-label="24"></a>  }</span>
+<span id="cb9-25"><a href="#cb9-25" aria-label="25"></a>  stan_likelihood <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/"</span>, likelihood_file))</span>
+<span id="cb9-26"><a href="#cb9-26" aria-label="26"></a>  stan_tdata_pll_args <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">brms_slices_likelihood</span>()) {</span>
+<span id="cb9-27"><a href="#cb9-27" aria-label="27"></a>    <span class="st">"data matrix COSN"</span></span>
+<span id="cb9-28"><a href="#cb9-28" aria-label="28"></a>  }</span>
+<span id="cb9-29"><a href="#cb9-29" aria-label="29"></a>  run_metadata <span class="ot">&lt;-</span> <span class="fu">attr</span>(data, <span class="st">"sdm_run_metadata"</span>)</span>
+<span id="cb9-30"><a href="#cb9-30" aria-label="30"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(run_metadata)) {</span>
+<span id="cb9-31"><a href="#cb9-31" aria-label="31"></a>    <span class="co"># Guard direct configure_model.sdm() calls that bypass check_data.sdm().</span></span>
+<span id="cb9-32"><a href="#cb9-32" aria-label="32"></a>    run_metadata <span class="ot">&lt;-</span> <span class="fu">sdm_run_metadata</span>(data, formula, model)</span>
+<span id="cb9-33"><a href="#cb9-33" aria-label="33"></a>  }</span>
+<span id="cb9-34"><a href="#cb9-34" aria-label="34"></a>  stanvars <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_funs, <span class="at">block =</span> <span class="st">"functions"</span>) <span class="sc">+</span></span>
+<span id="cb9-35"><a href="#cb9-35" aria-label="35"></a>    brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_tdata, <span class="at">block =</span> <span class="st">"tdata"</span>, <span class="at">pll_args =</span> stan_tdata_pll_args) <span class="sc">+</span></span>
+<span id="cb9-36"><a href="#cb9-36" aria-label="36"></a>    brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">x =</span> run_metadata<span class="sc">$</span>G_sdm_runs, <span class="at">name =</span> <span class="st">"G_sdm_runs"</span>) <span class="sc">+</span></span>
+<span id="cb9-37"><a href="#cb9-37" aria-label="37"></a>    <span class="fu">sdm_stanvar_int_array</span>(run_metadata<span class="sc">$</span>sdm_run_start, <span class="st">"sdm_run_start"</span>, <span class="st">"G_sdm_runs"</span>) <span class="sc">+</span></span>
+<span id="cb9-38"><a href="#cb9-38" aria-label="38"></a>    <span class="fu">sdm_stanvar_int_array</span>(run_metadata<span class="sc">$</span>sdm_run_count, <span class="st">"sdm_run_count"</span>, <span class="st">"G_sdm_runs"</span>) <span class="sc">+</span></span>
+<span id="cb9-39"><a href="#cb9-39" aria-label="39"></a>    brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_likelihood, <span class="at">block =</span> <span class="st">"likelihood"</span>, <span class="at">position =</span> <span class="st">"end"</span>)</span>
+<span id="cb9-40"><a href="#cb9-40" aria-label="40"></a></span>
+<span id="cb9-41"><a href="#cb9-41" aria-label="41"></a>  <span class="co"># construct main brms formula from the bmm formula</span></span>
+<span id="cb9-42"><a href="#cb9-42" aria-label="42"></a>  formula <span class="ot">&lt;-</span> <span class="fu">bmf2bf</span>(model, formula)</span>
+<span id="cb9-43"><a href="#cb9-43" aria-label="43"></a>  formula<span class="sc">$</span>family <span class="ot">&lt;-</span> sdm_simple</span>
+<span id="cb9-44"><a href="#cb9-44" aria-label="44"></a></span>
 <span id="cb9-45"><a href="#cb9-45" aria-label="45"></a>  <span class="fu">nlist</span>(formula, data, stanvars)</span>
 <span id="cb9-46"><a href="#cb9-46" aria-label="46"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Note that <code>configure_model</code> no longer returns <code>init</code> — initial values are now handled separately by <code>create_initfun()</code>, which uses the <code>init_ranges</code> defined in the model object.</p>
 <p>This is the longest <code>configure_model</code> method in the package, so it is worth separating the parts that every custom-family model needs from the parts that are specific to SDM.</p>
-<p>Every custom-family model needs the first two. The <code>brms::custom_family()</code> call declares the parameters (<code>dpars</code>), their link functions, bounds, whether the likelihood is vectorized (<code>loop = FALSE</code> here), and the R functions that implement <code>log_lik</code> and <code>posterior_predict</code>. For more information, see the <a href="https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html">brms custom families vignette</a>. And the Stan code is read from <code>inst/stan_chunks/</code> through <code>system.file()</code> — not a relative path — so that it is found once the package is installed rather than only when it is loaded from source. Each chunk becomes its own <code>brms::stanvar()</code>, tagged with the Stan block it belongs in.</p>
+<p>Every custom-family model needs the first two. The <code>brms::custom_family()</code> call declares the parameters (<code>dpars</code>), their link functions, bounds, whether the likelihood is vectorized (<code>loop = FALSE</code> here), and the R functions that implement <code>log_lik</code>, <code>posterior_predict</code> and <code>posterior_epred</code>. For more information, see the <a href="https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html">brms custom families vignette</a>. And the Stan code is read from <code>inst/stan_chunks/</code> through <code>system.file()</code> — not a relative path — so that it is found once the package is installed rather than only when it is loaded from source. Each chunk becomes its own <code>brms::stanvar()</code>, tagged with the Stan block it belongs in.</p>
 <p>The rest is SDM-specific, and all of it exists to make the normalizing constant cheap. Three things are going on:</p>
 <ul>
 <li><strong>Data passed to Stan, not just code.</strong> <code>brms::stanvar(x = ..., name = ...)</code> passes an R <em>value</em> into the Stan data block. SDM passes the run count and, through the helper <code>sdm_stanvar_int_array()</code>, the run start and length arrays computed back in <code>check_data.sdm</code>. The helper exists because <code>stanvar()</code> would declare an integer array as <code>vector</code>, so it overwrites the generated <code>scode</code> with <code>array[G_sdm_runs] int &lt;name&gt;;</code>.</li>
-<li><strong>Two likelihood chunks.</strong> Which one is read depends on <code>sdm_use_threaded_likelihood()</code>. See the threading section of the architecture chapter for why there are two and what <code>threading(force = TRUE)</code> does.</li>
+<li><strong>Two likelihood chunks.</strong> Which one is read depends on <code>brms_slices_likelihood()</code>. See the threading section of the architecture chapter for why there are two and what <code>threading(force = TRUE)</code> does.</li>
 <li><strong><code>pll_args</code>.</strong> Data that the threaded likelihood needs must also be declared in the partial-log-likelihood signature. That is what <code>pll_args = "data matrix COSN"</code> on the <code>tdata</code> stanvar does, and what <code>sdm_stanvar_int_array()</code> sets for the index arrays. Without it the variable is out of scope inside <code>partial_log_lik</code> and the model does not compile.</li>
 </ul>
 <p>Converting the <code>bmmformula</code> to a <code>brmsformula</code> and collecting all arguments is done entirely using the <code>bmf2bf</code> method.</p>
@@ -873,17 +888,17 @@ window.Quarto = {
 <span id="cb12-13"><a href="#cb12-13" aria-label="13"></a>    <span class="at">mu =</span> <span class="dv">0</span></span>
 <span id="cb12-14"><a href="#cb12-14" aria-label="14"></a>  ),</span>
 <span id="cb12-15"><a href="#cb12-15" aria-label="15"></a>  <span class="at">priors =</span> <span class="fu">list</span>(</span>
-<span id="cb12-16"><a href="#cb12-16" aria-label="16"></a>    <span class="at">drift =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"cauchy(0,1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.5)"</span>),</span>
-<span id="cb12-17"><a href="#cb12-17" aria-label="17"></a>    <span class="at">bound =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0,0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.5)"</span>),</span>
-<span id="cb12-18"><a href="#cb12-18" aria-label="18"></a>    <span class="at">ndt   =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(-1.5,0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.3)"</span>),</span>
-<span id="cb12-19"><a href="#cb12-19" aria-label="19"></a>    <span class="at">zr    =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0,0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.3)"</span>)</span>
+<span id="cb12-16"><a href="#cb12-16" aria-label="16"></a>    <span class="at">drift =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"cauchy(0,1)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.5)"</span>, <span class="at">sd =</span> <span class="st">"exponential(1)"</span>),</span>
+<span id="cb12-17"><a href="#cb12-17" aria-label="17"></a>    <span class="at">bound =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0,0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.5)"</span>, <span class="at">sd =</span> <span class="st">"exponential(2)"</span>),</span>
+<span id="cb12-18"><a href="#cb12-18" aria-label="18"></a>    <span class="at">ndt   =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(-1.5,0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.3)"</span>, <span class="at">sd =</span> <span class="st">"exponential(2)"</span>),</span>
+<span id="cb12-19"><a href="#cb12-19" aria-label="19"></a>    <span class="at">zr    =</span> <span class="fu">list</span>(<span class="at">main =</span> <span class="st">"normal(0,0.5)"</span>, <span class="at">effects =</span> <span class="st">"normal(0,0.3)"</span>, <span class="at">sd =</span> <span class="st">"exponential(2)"</span>)</span>
 <span id="cb12-20"><a href="#cb12-20" aria-label="20"></a>  ),</span>
 <span id="cb12-21"><a href="#cb12-21" aria-label="21"></a>  <span class="at">init_ranges =</span> <span class="fu">list</span>(</span>
-<span id="cb12-22"><a href="#cb12-22" aria-label="22"></a>    <span class="at">mu =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.1</span>, <span class="fl">0.1</span>),</span>
-<span id="cb12-23"><a href="#cb12-23" aria-label="23"></a>    <span class="at">drift  =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1</span>, <span class="dv">1</span>),</span>
-<span id="cb12-24"><a href="#cb12-24" aria-label="24"></a>    <span class="at">bound  =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>),</span>
-<span id="cb12-25"><a href="#cb12-25" aria-label="25"></a>    <span class="at">ndt    =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="fl">0.05</span>),</span>
-<span id="cb12-26"><a href="#cb12-26" aria-label="26"></a>    <span class="at">zr     =</span> <span class="fu">c</span>(<span class="fl">0.45</span>, <span class="fl">0.55</span>)</span>
+<span id="cb12-22"><a href="#cb12-22" aria-label="22"></a>    <span class="at">mu =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.1</span>,<span class="fl">0.1</span>),</span>
+<span id="cb12-23"><a href="#cb12-23" aria-label="23"></a>    <span class="at">drift  =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1</span>,<span class="dv">1</span>),</span>
+<span id="cb12-24"><a href="#cb12-24" aria-label="24"></a>    <span class="at">bound  =</span> <span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">2</span>),</span>
+<span id="cb12-25"><a href="#cb12-25" aria-label="25"></a>    <span class="at">ndt    =</span> <span class="fu">c</span>(<span class="fl">0.01</span>,<span class="fl">0.05</span>),</span>
+<span id="cb12-26"><a href="#cb12-26" aria-label="26"></a>    <span class="at">zr     =</span> <span class="fu">c</span>(<span class="fl">0.45</span>,<span class="fl">0.55</span>)</span>
 <span id="cb12-27"><a href="#cb12-27" aria-label="27"></a>  )</span>
 <span id="cb12-28"><a href="#cb12-28" aria-label="28"></a>)</span>
 <span id="cb12-29"><a href="#cb12-29" aria-label="29"></a></span>
@@ -895,10 +910,10 @@ window.Quarto = {
 <span id="cb12-35"><a href="#cb12-35" aria-label="35"></a>      <span class="at">domain =</span> <span class="st">"Decision Making / Response times"</span>,</span>
 <span id="cb12-36"><a href="#cb12-36" aria-label="36"></a>      <span class="at">task =</span> <span class="st">"Two-Alternative Force Choice RT"</span>,</span>
 <span id="cb12-37"><a href="#cb12-37" aria-label="37"></a>      <span class="at">name =</span> <span class="st">"Diffusion Decision Model"</span>,</span>
-<span id="cb12-38"><a href="#cb12-38" aria-label="38"></a>      <span class="at">version =</span> <span class="st">"NA"</span>,</span>
-<span id="cb12-39"><a href="#cb12-39" aria-label="39"></a>      <span class="at">citation =</span> <span class="fu">glue</span>(</span>
-<span id="cb12-40"><a href="#cb12-40" aria-label="40"></a>        <span class="st">"Ratcliff, R. (1978). A theory of memory retrieval. Psychological Review, 85(2), 59-108. https://doi.org/10/fjwm2f;"</span></span>
-<span id="cb12-41"><a href="#cb12-41" aria-label="41"></a>      ),</span>
+<span id="cb12-38"><a href="#cb12-38" aria-label="38"></a>      <span class="at">citation =</span> <span class="fu">glue</span>(</span>
+<span id="cb12-39"><a href="#cb12-39" aria-label="39"></a>        <span class="st">"Ratcliff, R. (1978). A theory of memory retrieval. Psychological Review, 85(2), 59-108. https://doi.org/10/fjwm2f;"</span></span>
+<span id="cb12-40"><a href="#cb12-40" aria-label="40"></a>      ),</span>
+<span id="cb12-41"><a href="#cb12-41" aria-label="41"></a>      <span class="at">version =</span> <span class="st">"NA"</span>,</span>
 <span id="cb12-42"><a href="#cb12-42" aria-label="42"></a>      <span class="at">requirements =</span> <span class="fu">glue</span>(</span>
 <span id="cb12-43"><a href="#cb12-43" aria-label="43"></a>        <span class="st">"- The response time should be in seconds and </span><span class="sc">\\</span></span>
 <span id="cb12-44"><a href="#cb12-44" aria-label="44"></a><span class="st">          represent the time between onset of the target stimulus until the response execution</span></span>
@@ -914,7 +929,7 @@ window.Quarto = {
 <span id="cb12-54"><a href="#cb12-54" aria-label="54"></a>    <span class="at">class =</span> <span class="fu">c</span>(<span class="st">"bmmodel"</span>, <span class="st">"ddm"</span>),</span>
 <span id="cb12-55"><a href="#cb12-55" aria-label="55"></a>    <span class="at">call =</span> call</span>
 <span id="cb12-56"><a href="#cb12-56" aria-label="56"></a>  )</span>
-<span id="cb12-57"><a href="#cb12-57" aria-label="57"></a>  out<span class="sc">$</span>links[<span class="fu">names</span>(links)] <span class="ot">&lt;-</span> links</span>
+<span id="cb12-57"><a href="#cb12-57" aria-label="57"></a>  out <span class="ot">&lt;-</span> <span class="fu">set_links</span>(out, links)</span>
 <span id="cb12-58"><a href="#cb12-58" aria-label="58"></a>  out</span>
 <span id="cb12-59"><a href="#cb12-59" aria-label="59"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
@@ -977,23 +992,24 @@ window.Quarto = {
 <span id="cb15-13"><a href="#cb15-13" aria-label="13"></a>      <span class="at">vars =</span> <span class="st">"dec[n]"</span>,</span>
 <span id="cb15-14"><a href="#cb15-14" aria-label="14"></a>      <span class="at">loop =</span> <span class="cn">TRUE</span>,</span>
 <span id="cb15-15"><a href="#cb15-15" aria-label="15"></a>      <span class="at">log_lik =</span> log_lik_ddm,</span>
-<span id="cb15-16"><a href="#cb15-16" aria-label="16"></a>      <span class="at">posterior_predict =</span> posterior_predict_ddm</span>
-<span id="cb15-17"><a href="#cb15-17" aria-label="17"></a>    )</span>
-<span id="cb15-18"><a href="#cb15-18" aria-label="18"></a>  }</span>
-<span id="cb15-19"><a href="#cb15-19" aria-label="19"></a></span>
-<span id="cb15-20"><a href="#cb15-20" aria-label="20"></a>  formula<span class="sc">$</span>family <span class="ot">&lt;-</span> <span class="fu">ddm_family</span>(</span>
-<span id="cb15-21"><a href="#cb15-21" aria-label="21"></a>    <span class="at">link_drift =</span> model<span class="sc">$</span>links<span class="sc">$</span>drift,</span>
-<span id="cb15-22"><a href="#cb15-22" aria-label="22"></a>    <span class="at">link_bound =</span> model<span class="sc">$</span>links<span class="sc">$</span>bound,</span>
-<span id="cb15-23"><a href="#cb15-23" aria-label="23"></a>    <span class="at">link_ndt =</span> model<span class="sc">$</span>links<span class="sc">$</span>ndt,</span>
-<span id="cb15-24"><a href="#cb15-24" aria-label="24"></a>    <span class="at">link_zr =</span> model<span class="sc">$</span>links<span class="sc">$</span>zr</span>
-<span id="cb15-25"><a href="#cb15-25" aria-label="25"></a>  )</span>
-<span id="cb15-26"><a href="#cb15-26" aria-label="26"></a></span>
-<span id="cb15-27"><a href="#cb15-27" aria-label="27"></a>  sc_path <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">"stan_chunks"</span>, <span class="at">package =</span> <span class="st">"bmm"</span>)</span>
-<span id="cb15-28"><a href="#cb15-28" aria-label="28"></a>  stan_functions <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/ddm_functions.stan"</span>))</span>
-<span id="cb15-29"><a href="#cb15-29" aria-label="29"></a>  stanvars <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_functions, <span class="at">block =</span> <span class="st">"functions"</span>)</span>
-<span id="cb15-30"><a href="#cb15-30" aria-label="30"></a></span>
-<span id="cb15-31"><a href="#cb15-31" aria-label="31"></a>  <span class="fu">nlist</span>(formula, data, stanvars)</span>
-<span id="cb15-32"><a href="#cb15-32" aria-label="32"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb15-16"><a href="#cb15-16" aria-label="16"></a>      <span class="at">posterior_predict =</span> posterior_predict_ddm,</span>
+<span id="cb15-17"><a href="#cb15-17" aria-label="17"></a>      <span class="at">posterior_epred =</span> posterior_epred_ddm</span>
+<span id="cb15-18"><a href="#cb15-18" aria-label="18"></a>    )</span>
+<span id="cb15-19"><a href="#cb15-19" aria-label="19"></a>  }</span>
+<span id="cb15-20"><a href="#cb15-20" aria-label="20"></a></span>
+<span id="cb15-21"><a href="#cb15-21" aria-label="21"></a>  formula<span class="sc">$</span>family <span class="ot">&lt;-</span> <span class="fu">ddm_family</span>(</span>
+<span id="cb15-22"><a href="#cb15-22" aria-label="22"></a>    <span class="at">link_drift =</span> model<span class="sc">$</span>links<span class="sc">$</span>drift,</span>
+<span id="cb15-23"><a href="#cb15-23" aria-label="23"></a>    <span class="at">link_bound =</span> model<span class="sc">$</span>links<span class="sc">$</span>bound,</span>
+<span id="cb15-24"><a href="#cb15-24" aria-label="24"></a>    <span class="at">link_ndt =</span> model<span class="sc">$</span>links<span class="sc">$</span>ndt,</span>
+<span id="cb15-25"><a href="#cb15-25" aria-label="25"></a>    <span class="at">link_zr =</span> model<span class="sc">$</span>links<span class="sc">$</span>zr</span>
+<span id="cb15-26"><a href="#cb15-26" aria-label="26"></a>  )</span>
+<span id="cb15-27"><a href="#cb15-27" aria-label="27"></a></span>
+<span id="cb15-28"><a href="#cb15-28" aria-label="28"></a>  sc_path <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">"stan_chunks"</span>, <span class="at">package =</span> <span class="st">"bmm"</span>)</span>
+<span id="cb15-29"><a href="#cb15-29" aria-label="29"></a>  stan_functions <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/ddm_functions.stan"</span>))</span>
+<span id="cb15-30"><a href="#cb15-30" aria-label="30"></a>  stanvars <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_functions, <span class="at">block =</span> <span class="st">"functions"</span>)</span>
+<span id="cb15-31"><a href="#cb15-31" aria-label="31"></a></span>
+<span id="cb15-32"><a href="#cb15-32" aria-label="32"></a>  <span class="fu">nlist</span>(formula, data, stanvars)</span>
+<span id="cb15-33"><a href="#cb15-33" aria-label="33"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Note that:</p>
 <ul>
@@ -1139,30 +1155,33 @@ window.Quarto = {
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20" data-filename="R/model_ezdm.R" data-bmm-src="configure_model.ezdm_3par"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-label="1"></a><span class="co">#' @export</span></span>
 <span id="cb20-2"><a href="#cb20-2" aria-label="2"></a>configure_model.ezdm_3par <span class="ot">&lt;-</span> <span class="cf">function</span>(model, data, formula) {</span>
-<span id="cb20-3"><a href="#cb20-3" aria-label="3"></a>  formula <span class="ot">&lt;-</span> <span class="fu">bmf2bf</span>(model, formula)</span>
-<span id="cb20-4"><a href="#cb20-4" aria-label="4"></a>  links <span class="ot">&lt;-</span> model<span class="sc">$</span>links</span>
-<span id="cb20-5"><a href="#cb20-5" aria-label="5"></a></span>
-<span id="cb20-6"><a href="#cb20-6" aria-label="6"></a>  formula<span class="sc">$</span>family <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">custom_family</span>(</span>
-<span id="cb20-7"><a href="#cb20-7" aria-label="7"></a>    <span class="st">"ezdm_3par"</span>,</span>
-<span id="cb20-8"><a href="#cb20-8" aria-label="8"></a>    <span class="at">dpars =</span> <span class="fu">c</span>(<span class="st">"mu"</span>, <span class="st">"drift"</span>, <span class="st">"bound"</span>, <span class="st">"ndt"</span>, <span class="st">"s"</span>),</span>
-<span id="cb20-9"><a href="#cb20-9" aria-label="9"></a>    <span class="at">links =</span> <span class="fu">c</span>(<span class="st">"identity"</span>, links<span class="sc">$</span>drift, links<span class="sc">$</span>bound, links<span class="sc">$</span>ndt, links<span class="sc">$</span>s),</span>
-<span id="cb20-10"><a href="#cb20-10" aria-label="10"></a>    <span class="at">lb =</span> <span class="fu">c</span>(<span class="cn">NA</span>, <span class="cn">NA</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>),</span>
-<span id="cb20-11"><a href="#cb20-11" aria-label="11"></a>    <span class="at">ub =</span> <span class="fu">c</span>(<span class="cn">NA</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="cn">NA</span>),</span>
-<span id="cb20-12"><a href="#cb20-12" aria-label="12"></a>    <span class="at">type =</span> <span class="st">"real"</span>,</span>
-<span id="cb20-13"><a href="#cb20-13" aria-label="13"></a>    <span class="at">log_lik =</span> log_lik_ezdm_3par,</span>
-<span id="cb20-14"><a href="#cb20-14" aria-label="14"></a>    <span class="at">posterior_predict =</span> posterior_predict_ezdm_3par,</span>
-<span id="cb20-15"><a href="#cb20-15" aria-label="15"></a>    <span class="at">loop =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb20-16"><a href="#cb20-16" aria-label="16"></a>    <span class="at">vars =</span> <span class="fu">c</span>(<span class="st">"vreal1[n]"</span>, <span class="st">"vint1[n]"</span>, <span class="st">"trials[n]"</span>)</span>
-<span id="cb20-17"><a href="#cb20-17" aria-label="17"></a>  )</span>
-<span id="cb20-18"><a href="#cb20-18" aria-label="18"></a></span>
-<span id="cb20-19"><a href="#cb20-19" aria-label="19"></a>  sc_path <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">"stan_chunks"</span>, <span class="at">package =</span> <span class="st">"bmm"</span>)</span>
-<span id="cb20-20"><a href="#cb20-20" aria-label="20"></a>  stan_functions <span class="ot">&lt;-</span> <span class="fu">read_lines2</span>(<span class="fu">paste0</span>(sc_path, <span class="st">"/ezdm_3par_functions.stan"</span>))</span>
-<span id="cb20-21"><a href="#cb20-21" aria-label="21"></a>  stanvars <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> stan_functions, <span class="at">block =</span> <span class="st">"functions"</span>)</span>
-<span id="cb20-22"><a href="#cb20-22" aria-label="22"></a></span>
-<span id="cb20-23"><a href="#cb20-23" aria-label="23"></a>  <span class="fu">nlist</span>(formula, data, stanvars)</span>
-<span id="cb20-24"><a href="#cb20-24" aria-label="24"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb20-3"><a href="#cb20-3" aria-label="3"></a>  <span class="co"># construct brms formula from the bmm formula</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-label="4"></a>  formula <span class="ot">&lt;-</span> <span class="fu">bmf2bf</span>(model, formula)</span>
+<span id="cb20-5"><a href="#cb20-5" aria-label="5"></a>  links <span class="ot">&lt;-</span> model<span class="sc">$</span>links</span>
+<span id="cb20-6"><a href="#cb20-6" aria-label="6"></a></span>
+<span id="cb20-7"><a href="#cb20-7" aria-label="7"></a>  <span class="co"># construct the family &amp; add to formula object</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-label="8"></a>  formula<span class="sc">$</span>family <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">custom_family</span>(</span>
+<span id="cb20-9"><a href="#cb20-9" aria-label="9"></a>    <span class="st">"ezdm_3par"</span>,</span>
+<span id="cb20-10"><a href="#cb20-10" aria-label="10"></a>    <span class="at">dpars =</span> <span class="fu">c</span>(<span class="st">"mu"</span>, <span class="st">"drift"</span>, <span class="st">"bound"</span>, <span class="st">"ndt"</span>, <span class="st">"s"</span>),</span>
+<span id="cb20-11"><a href="#cb20-11" aria-label="11"></a>    <span class="at">links =</span> <span class="fu">c</span>(<span class="st">"identity"</span>, links<span class="sc">$</span>drift, links<span class="sc">$</span>bound, links<span class="sc">$</span>ndt, links<span class="sc">$</span>s),</span>
+<span id="cb20-12"><a href="#cb20-12" aria-label="12"></a>    <span class="at">lb =</span> <span class="fu">c</span>(<span class="cn">NA</span>, <span class="cn">NA</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>),</span>
+<span id="cb20-13"><a href="#cb20-13" aria-label="13"></a>    <span class="at">ub =</span> <span class="fu">c</span>(<span class="cn">NA</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="cn">NA</span>),</span>
+<span id="cb20-14"><a href="#cb20-14" aria-label="14"></a>    <span class="at">type =</span> <span class="st">"real"</span>,</span>
+<span id="cb20-15"><a href="#cb20-15" aria-label="15"></a>    <span class="at">log_lik =</span> log_lik_ezdm_3par,</span>
+<span id="cb20-16"><a href="#cb20-16" aria-label="16"></a>    <span class="at">posterior_predict =</span> posterior_predict_ezdm_3par,</span>
+<span id="cb20-17"><a href="#cb20-17" aria-label="17"></a>    <span class="at">posterior_epred =</span> posterior_epred_ezdm_3par,</span>
+<span id="cb20-18"><a href="#cb20-18" aria-label="18"></a>    <span class="at">loop =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb20-19"><a href="#cb20-19" aria-label="19"></a>    <span class="at">vars =</span> <span class="fu">c</span>(<span class="st">"vreal1[n]"</span>, <span class="st">"vint1[n]"</span>, <span class="st">"trials[n]"</span>)</span>
+<span id="cb20-20"><a href="#cb20-20" aria-label="20"></a>  )</span>
+<span id="cb20-21"><a href="#cb20-21" aria-label="21"></a></span>
+<span id="cb20-22"><a href="#cb20-22" aria-label="22"></a>  <span class="co"># prepare initial stanvars to pass to brms, model formula and priors</span></span>
+<span id="cb20-23"><a href="#cb20-23" aria-label="23"></a>  stanvars <span class="ot">&lt;-</span> brms<span class="sc">::</span><span class="fu">stanvar</span>(<span class="at">scode =</span> <span class="fu">.ezdm_stan_functions</span>(<span class="st">"3par"</span>), <span class="at">block =</span> <span class="st">"functions"</span>)</span>
+<span id="cb20-24"><a href="#cb20-24" aria-label="24"></a></span>
+<span id="cb20-25"><a href="#cb20-25" aria-label="25"></a>  <span class="co"># return the list</span></span>
+<span id="cb20-26"><a href="#cb20-26" aria-label="26"></a>  <span class="fu">nlist</span>(formula, data, stanvars)</span>
+<span id="cb20-27"><a href="#cb20-27" aria-label="27"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<p>Note the <code>vars</code> argument in <code>custom_family</code> — it lists the additional response terms that the Stan likelihood needs access to.</p>
+<p>Note the <code>vars</code> argument in <code>custom_family</code> — it lists the additional response terms that the Stan likelihood needs access to. The Stan code comes from <code>.ezdm_stan_functions()</code>, which joins chunks shared by both versions (<code>ezdm_series.stan</code>, <code>ezdm_cumulants.stan</code>) with the version’s own functions; a helper like this keeps shared Stan code in one file.</p>
 <hr>
 <p>We will now look at how to construct all these parts for a new model. <strong>Hint</strong>: you don’t have to do it manually, you can use the <code>use_model_template()</code> function to generate templates for your model.</p>
 

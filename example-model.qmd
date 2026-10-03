@@ -11,76 +11,85 @@ The model is defined in the file `R/model_imm.R`. Let's go through the different
 The full IMM model is defined in the following internal model class:
 
 ```{.r filename="R/model_imm.R" bmm-src=".model_imm"}
-.model_imm <-
-  function(resp_error = NULL, nt_features = NULL, nt_distances = NULL,
-           set_size = NULL, regex = FALSE, version = "full", links = NULL,
-           call = NULL, ...) {
-    out <- structure(
-      list(
-        resp_vars = nlist(resp_error),
-        other_vars = nlist(nt_features, nt_distances, set_size),
-        domain = "Visual working memory",
-        task = "Continuous reproduction",
-        name = "Interference measurement model by Oberauer and Lin (2017).",
-        version = version,
-        citation = glue(
-          "Oberauer, K., & Lin, H.Y. (2017). An interference model \\
+.model_imm <- function(resp_error = NULL, nt_features = NULL, nt_distances = NULL,
+                       set_size = NULL, regex = FALSE, version = "full", links = NULL,
+                       call = NULL, ...) {
+  out <- structure(
+    list(
+      resp_vars = nlist(resp_error),
+      other_vars = nlist(nt_features, nt_distances, set_size),
+      domain = "Visual working memory",
+      task = "Continuous reproduction",
+      name = "Interference measurement model by Oberauer and Lin (2017).",
+      citation = glue(
+        "Oberauer, K., & Lin, H.Y. (2017). An interference model \\
           of visual working memory. Psychological Review, 124(1), 21-59"
-        ),
-        requirements = glue(
-          '- The response vairable should be in radians and \\
+      ),
+      version = version,
+      requirements = glue(
+        "- The response vairable should be in radians and \\
           represent the angular error relative to the target
           - The non-target features should be in radians and be \\
-          centered relative to the target'
-        ),
-        parameters = list(
-          mu1 = glue(
-            "Location parameter of the von Mises distribution for memory \\
-            responses (in radians). Fixed internally to 0 by default."
-          ),
-          kappa = "Concentration parameter of the von Mises distribution",
-          a = "General activation of memory items",
-          c = "Context activation",
-          s = "Spatial similarity gradient"
-        ),
-        links = list(
-          mu1 = "tan_half",
-          kappa = "log",
-          a = "log",
-          c = "log",
-          s = "log"
-        ),
-        fixed_parameters = list(mu1 = 0, mu2 = 0, kappa2 = -100),
-        default_priors = list(
-          mu1 = list(main = "student_t(1, 0, 1)"),
-          kappa = list(main = "normal(2, 1)", effects = "normal(0, 1)"),
-          a = list(main = "normal(0, 1)", effects = "normal(0, 1)"),
-          c = list(main = "normal(0, 1)", effects = "normal(0, 1)"),
-          s = list(main = "normal(0, 1)", effects = "normal(0, 1)")
-        )
+          centered relative to the target"
       ),
-      # attributes
-      regex = regex,
-      regex_vars = c('nt_features', 'nt_distances'),
-      class = c("bmmodel", "circular", "non_targets", "imm", paste0('imm_',version)),
-      call = call
-    )
+      parameters = list(
+        mu1 = glue(
+          "Location parameter of the von Mises distribution for memory \\
+            responses (in radians). Fixed internally to 0 by default."
+        ),
+        kappa = "Concentration parameter of the von Mises distribution",
+        a = "General activation of memory items",
+        c = "Context activation",
+        s = "Spatial similarity gradient"
+      ),
+      links = list(
+        mu1 = "tan_half",
+        kappa = "log",
+        a = "log",
+        c = "log",
+        s = "log"
+      ),
+      fixed_parameters = list(mu1 = 0, mu2 = 0, kappa2 = -100),
+      default_priors = list(
+        mu1 = list(main = "normal(0, 0.5)", effects = "normal(0, 0.25)", sd = "exponential(4)"),
+        kappa = list(main = "normal(2, 1)", effects = "normal(0, 1)", sd = "exponential(1)"),
+        a = list(main = "normal(0, 1)", effects = "normal(0, 1)", sd = "exponential(1)"),
+        c = list(main = "normal(0, 1)", effects = "normal(0, 1)", sd = "exponential(1)"),
+        s = list(main = "normal(0, 1)", effects = "normal(0, 1)", sd = "exponential(1)")
+      ),
+      # central 50% of the main default prior on the native scale
+      init_ranges = list(
+        mu1 = c(-0.65, 0.65),
+        kappa = c(3.8, 15),
+        a = c(0.51, 2),
+        c = c(0.51, 2),
+        s = c(0.51, 2)
+      )
+    ),
+    # attributes
+    regex = regex,
+    regex_vars = c("nt_features", "nt_distances"),
+    class = c("bmmodel", "circular", "non_targets", "imm", paste0("imm_", version)),
+    call = call
+  )
 
-    # add version specific information
-    if (version == "abc") {
-      out$parameters$s <- NULL
-      out$links$s <- NULL
-      out$default_priors$s <- NULL
-      attributes(out)$regex_vars <- c('nt_features')
-    } else if (version == "bsc") {
-      out$parameters$a <- NULL
-      out$links$a <- NULL
-      out$default_priors$a <- NULL
-    }
-
-    out$links[names(links)] <- links
-    out
+  # add version specific information
+  if (version == "abc") {
+    out$parameters$s <- NULL
+    out$links$s <- NULL
+    out$default_priors$s <- NULL
+    out$init_ranges$s <- NULL
+    attributes(out)$regex_vars <- c("nt_features")
+  } else if (version == "bsc") {
+    out$parameters$a <- NULL
+    out$links$a <- NULL
+    out$default_priors$a <- NULL
+    out$init_ranges$a <- NULL
   }
+
+  out <- set_links(out, links)
+  out
+}
 ```
 
 Here is a brief explanation of the different components of the model definition:
@@ -95,11 +104,13 @@ Here is a brief explanation of the different components of the model definition:
 
 `parameters:` contains a named list of all parameters in the model that can be estimated by the user and their description. This information is used internally to check if the `bmmformula` contains linear model formulas for all model parameters, and to decide what information to include in the summary of `bmmfit` objects.
 
-`links:` a named list providing the link function for each parameter. For example, `kappa` in the `imm` models has to be positive, so it is sampled on the log scale. This information is used in defining the model family and for the summary methods. If you want the user to be able to specify custom link functions, the next to last line of the script replaces the links with those provided by the user
+`links:` a named list providing the link function for each parameter. For example, `kappa` in the `imm` models has to be positive, so it is sampled on the log scale. This information is used in defining the model family and for the summary methods. The next to last line, `set_links()`, applies and validates links the user passes. The IMM builds its links into the mixture family and the non-linear formulas, so it declares `settable_links.imm()` returning `character(0)`, and any link a user passes is refused (see @sec-links)
 
 `fixed_parameters` in the `imm` several parameters are fixed to constant values internally to identify the model. Only one of them, `mu1` is also part of the `parameters` block - this is the only fixed parameters that users can choose to estimate instead of leaving it fixed. `mu2` and `kappa2` cannot be freely estimated.
 
-`default_priors` a list of lists for each parameter in the model. Each prior has two components: `main`, the prior that will be put on the Intercept or on each level of a factor if the intercept is suppressed; `effects`, the prior to put on the regression coefficients relative to the intercept. The priors are described as in the `set_prior` function from `brms`. This information is used by the `configure_prior()` S3 method to automatically set the default priors for the model. The priors that you put here will be used by `bmm()` unless the users chooses to overwrite them.
+`default_priors` a list of lists for each parameter in the model. Each prior has three components: `main`, the prior that will be put on the Intercept or on each level of a factor if the intercept is suppressed; `effects`, the prior to put on the regression coefficients relative to the intercept; and `sd`, the prior on the standard deviations of random effects. The priors are described as in the `set_prior` function from `brms`. This information is used by the `configure_prior()` S3 method to automatically set the default priors for the model. The priors that you put here will be used by `bmm()` unless the users chooses to overwrite them.
+
+`init_ranges`: a range on the native scale for each parameter's initial values. The IMM's are the central 50% of each parameter's `main` prior; see the architecture chapter for how they are used.
 
 `regex:` For the `imm` models, the `nt_features` and `nt_distances` variables can be specified with regular expressions, if the user sets `regex = TRUE`
 
@@ -209,8 +220,10 @@ The model alias is a user-facing function that calls the internal model function
 #'            cores = 4,
 #'            backend = 'cmdstanr')
 #' @export
-imm <- function(resp_error, nt_features, nt_distances, set_size, regex = FALSE, version = "full", ...) {
+imm <- function(resp_error, nt_features, nt_distances, set_size, regex = FALSE,
+                version = c("full", "bsc", "abc"), ...) {
   call <- match.call()
+  version <- match.arg(version)
   dots <- list(...)
   if ("setsize" %in% names(dots)) {
     set_size <- dots$setsize
@@ -218,9 +231,12 @@ imm <- function(resp_error, nt_features, nt_distances, set_size, regex = FALSE, 
   }
   if (version == "abc") nt_distances <- NULL
   stop_missing_args()
-  .model_imm(resp_error = resp_error, nt_features = nt_features,
-             nt_distances = nt_distances, set_size = set_size, regex = regex,
-             version = version, call = call, ...)
+
+  .model_imm(
+    resp_error = resp_error, nt_features = nt_features,
+    nt_distances = nt_distances, set_size = set_size, regex = regex,
+    version = version, call = call, ...
+  )
 }
 ```
 
@@ -368,7 +384,7 @@ Read the dispatch order carefully here, because it is the reverse of what the na
 
 That is why `bmf2bf.default` returns `NULL` rather than a formula. It means "nobody claimed the first line". `bmf2bf.bmmodel` sees the `NULL`, falls through the `%||%`, and builds the single-response first line `resp ~ 1` itself. A model with several response variables, or one needing `vreal()`, `vint()` or `trials()`, defines `bmf2bf.mymodel` that returns the first line it wants; `NextMethod()` then returns that instead of `NULL` and the `%||%` fallback never fires.
 
-Once the first line exists, the rest is mechanical: each parameter formula becomes `brms::nlf()` if it is marked non-linear and `brms::lf()` otherwise, and `Reduce()` adds them all to the base formula. Whether a component is marked non-linear is decided in `assign_nl_attr()` (`R/bmmformula.R:375-382`) purely by whether one of its predictors is also a predicted parameter — which is the mechanism behind the name-clash warning described in the next chapter.
+Once the first line exists, the rest is mechanical: each parameter formula becomes `brms::nlf()` if it is marked non-linear and `brms::lf()` otherwise, and `Reduce()` adds them all to the base formula. Whether a component is marked non-linear is decided in `assign_nl_attr()` purely by whether one of its predictors is also a predicted parameter — which is the mechanism behind the name-clash warning described in the next chapter.
 
 This conversion from a `bmmformula` object into a `brmsformula` object is done to avoid users having to specify complicated and long formulas or specifying all additional response information in the `brmsformula` themselves. For more detailed information on the use of additional response information in a `brmsformula` please see the `brmsformula` [documentation](https://rdrr.io/cran/brms/man/brmsformula.html).
 
@@ -409,25 +425,25 @@ The SDM model is defined in the file `R/model_sdm.R`. The SDM model differs in t
       ),
       fixed_parameters = list(mu = 0),
       default_priors = list(
-        mu = list(main = "student_t(1, 0, 1)"),
-        kappa = list(main = "student_t(5, 1.75, 0.75)", effects = "normal(0, 1)"),
-        c = list(main = "student_t(5, 2, 0.75)", effects = "normal(0, 1)")
+        mu = list(main = "normal(0, 0.5)", effects = "normal(0, 0.25)", sd = "exponential(4)"),
+        kappa = list(main = "student_t(5, 1.75, 0.75)", effects = "normal(0, 1)", sd = "exponential(1)"),
+        c = list(main = "student_t(5, 2, 0.75)", effects = "normal(0, 1)", sd = "exponential(1)")
       ),
       init_ranges = list(
-        mu = c(-0.5, 0.5),
-        kappa = c(2.5, 3.5),
-        c = c(4, 6)
+        mu = c(-0.5,0.5),
+        kappa = c(2.5,3.5),
+        c = c(4,6)
       )
     ),
     class = c("bmmodel", "circular", "sdm", paste0("sdm_", version)),
     call = call
   )
-  out$links[names(links)] <- links
+  out <- set_links(out, links)
   out
 }
 ```
 
-Note that compared to the earlier IMM example, the SDM model now includes `init_ranges`. This provides initial value ranges for MCMC sampling, which the `create_initfun()` step uses to generate appropriate starting values. The SDM model benefits from custom initialization because its custom Stan likelihood can be sensitive to extreme starting values.
+Like the IMM, the SDM sets `init_ranges`, which `create_initfun()` uses to generate starting values. Here they are hand-set rather than derived from the priors.
 
 The model definition is similar to the IMM model, but the SDM model only requires the user to specify the response error, but not additional variables such as non-target variables. The `class` is also different, as the SDM model is not a subclass of the IMM model. We'll skip the alias for the SDM model, as it is similar for every model.
 
@@ -447,7 +463,7 @@ check_data.sdm <- function(model, data, formula) {
 
 This is a compact example of the attribute bridge. Having sorted the data, the method computes where each run of identical predictor values starts and how long it is — the information the Stan likelihood needs to compute its normalizing constant once per run rather than once per row — and hangs the result on the data frame as `sdm_run_metadata`. `configure_model.sdm` reads it back out a few pipeline steps later. The computation itself is a separate function, `sdm_run_metadata()`, and that matters: it is the reason `configure_model.sdm` can recompute the metadata when it is called directly and the attribute is absent.
 
-One detail in that function is worth copying. brms drops rows with missing values in any model variable before fitting, so run boundaries computed on the full data frame would not line up with the rows Stan actually sees. `sdm_run_metadata()` therefore applies `stats::complete.cases()` over the response and predictor columns before computing the runs (`R/model_sdm.R:202-211`). Any index you precompute in `check_data` and pass through to Stan has the same problem.
+One detail in that function is worth copying. brms drops rows with missing values in any model variable before fitting, so run boundaries computed on the full data frame would not line up with the rows Stan actually sees. `sdm_run_metadata()` therefore applies `stats::complete.cases()` over the response and predictor columns before computing the runs. Any index you precompute in `check_data` and pass through to Stan has the same problem.
 
 ### configure_model() methods
 
@@ -465,20 +481,21 @@ configure_model.sdm <- function(model, data, formula) {
     ub = c(NA, NA, NA),
     type = "real", loop = FALSE,
     log_lik = log_lik_sdm_simple,
-    posterior_predict = posterior_predict_sdm_simple
+    posterior_predict = posterior_predict_sdm_simple,
+    posterior_epred = posterior_epred_sdm_simple
   )
 
   # prepare initial stanvars to pass to brms, model formula and priors
   sc_path <- system.file("stan_chunks", package = "bmm")
   stan_funs <- read_lines2(paste0(sc_path, "/sdm_simple_funs.stan"))
   stan_tdata <- read_lines2(paste0(sc_path, "/sdm_simple_tdata.stan"))
-  likelihood_file <- if (sdm_use_threaded_likelihood()) {
+  likelihood_file <- if (brms_slices_likelihood()) {
     "sdm_simple_likelihood_threaded.stan"
   } else {
     "sdm_simple_likelihood.stan"
   }
   stan_likelihood <- read_lines2(paste0(sc_path, "/", likelihood_file))
-  stan_tdata_pll_args <- if (sdm_use_threaded_likelihood()) {
+  stan_tdata_pll_args <- if (brms_slices_likelihood()) {
     "data matrix COSN"
   }
   run_metadata <- attr(data, "sdm_run_metadata")
@@ -497,7 +514,6 @@ configure_model.sdm <- function(model, data, formula) {
   formula <- bmf2bf(model, formula)
   formula$family <- sdm_simple
 
-  # return the list
   nlist(formula, data, stanvars)
 }
 ```
@@ -506,12 +522,12 @@ Note that `configure_model` no longer returns `init` — initial values are now 
 
 This is the longest `configure_model` method in the package, so it is worth separating the parts that every custom-family model needs from the parts that are specific to SDM.
 
-Every custom-family model needs the first two. The `brms::custom_family()` call declares the parameters (`dpars`), their link functions, bounds, whether the likelihood is vectorized (`loop = FALSE` here), and the R functions that implement `log_lik` and `posterior_predict`. For more information, see the [brms custom families vignette](https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html). And the Stan code is read from `inst/stan_chunks/` through `system.file()` — not a relative path — so that it is found once the package is installed rather than only when it is loaded from source. Each chunk becomes its own `brms::stanvar()`, tagged with the Stan block it belongs in.
+Every custom-family model needs the first two. The `brms::custom_family()` call declares the parameters (`dpars`), their link functions, bounds, whether the likelihood is vectorized (`loop = FALSE` here), and the R functions that implement `log_lik`, `posterior_predict` and `posterior_epred`. For more information, see the [brms custom families vignette](https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html). And the Stan code is read from `inst/stan_chunks/` through `system.file()` — not a relative path — so that it is found once the package is installed rather than only when it is loaded from source. Each chunk becomes its own `brms::stanvar()`, tagged with the Stan block it belongs in.
 
 The rest is SDM-specific, and all of it exists to make the normalizing constant cheap. Three things are going on:
 
 -   **Data passed to Stan, not just code.** `brms::stanvar(x = ..., name = ...)` passes an R *value* into the Stan data block. SDM passes the run count and, through the helper `sdm_stanvar_int_array()`, the run start and length arrays computed back in `check_data.sdm`. The helper exists because `stanvar()` would declare an integer array as `vector`, so it overwrites the generated `scode` with `array[G_sdm_runs] int <name>;`.
--   **Two likelihood chunks.** Which one is read depends on `sdm_use_threaded_likelihood()`. See the threading section of the architecture chapter for why there are two and what `threading(force = TRUE)` does.
+-   **Two likelihood chunks.** Which one is read depends on `brms_slices_likelihood()`. See the threading section of the architecture chapter for why there are two and what `threading(force = TRUE)` does.
 -   **`pll_args`.** Data that the threaded likelihood needs must also be declared in the partial-log-likelihood signature. That is what `pll_args = "data matrix COSN"` on the `tdata` stanvar does, and what `sdm_stanvar_int_array()` sets for the index arrays. Without it the variable is out of scope inside `partial_log_lik` and the model does not compile.
 
 Converting the `bmmformula` to a `brmsformula` and collecting all arguments is done entirely using the `bmf2bf` method.
@@ -584,17 +600,17 @@ The DDM uses a defaults table to store parameters, links, priors, and init_range
     mu = 0
   ),
   priors = list(
-    drift = list(main = "cauchy(0,1)", effects = "normal(0,0.5)"),
-    bound = list(main = "normal(0,0.5)", effects = "normal(0,0.5)"),
-    ndt   = list(main = "normal(-1.5,0.5)", effects = "normal(0,0.3)"),
-    zr    = list(main = "normal(0,0.5)", effects = "normal(0,0.3)")
+    drift = list(main = "cauchy(0,1)", effects = "normal(0,0.5)", sd = "exponential(1)"),
+    bound = list(main = "normal(0,0.5)", effects = "normal(0,0.5)", sd = "exponential(2)"),
+    ndt   = list(main = "normal(-1.5,0.5)", effects = "normal(0,0.3)", sd = "exponential(2)"),
+    zr    = list(main = "normal(0,0.5)", effects = "normal(0,0.3)", sd = "exponential(2)")
   ),
   init_ranges = list(
-    mu = c(-0.1, 0.1),
-    drift  = c(-1, 1),
-    bound  = c(1, 2),
-    ndt    = c(0.01, 0.05),
-    zr     = c(0.45, 0.55)
+    mu = c(-0.1,0.1),
+    drift  = c(-1,1),
+    bound  = c(1,2),
+    ndt    = c(0.01,0.05),
+    zr     = c(0.45,0.55)
   )
 )
 
@@ -606,10 +622,10 @@ The DDM uses a defaults table to store parameters, links, priors, and init_range
       domain = "Decision Making / Response times",
       task = "Two-Alternative Force Choice RT",
       name = "Diffusion Decision Model",
-      version = "NA",
       citation = glue(
         "Ratcliff, R. (1978). A theory of memory retrieval. Psychological Review, 85(2), 59-108. https://doi.org/10/fjwm2f;"
       ),
+      version = "NA",
       requirements = glue(
         "- The response time should be in seconds and \\
           represent the time between onset of the target stimulus until the response execution
@@ -625,7 +641,7 @@ The DDM uses a defaults table to store parameters, links, priors, and init_range
     class = c("bmmodel", "ddm"),
     call = call
   )
-  out$links[names(links)] <- links
+  out <- set_links(out, links)
   out
 }
 ```
@@ -682,7 +698,8 @@ configure_model.ddm <- function(model, data, formula) {
       vars = "dec[n]",
       loop = TRUE,
       log_lik = log_lik_ddm,
-      posterior_predict = posterior_predict_ddm
+      posterior_predict = posterior_predict_ddm,
+      posterior_epred = posterior_epred_ddm
     )
   }
 
@@ -843,9 +860,11 @@ Each EZDM version has its own `configure_model` method because the Stan likeliho
 ```{.r filename="R/model_ezdm.R" bmm-src="configure_model.ezdm_3par"}
 #' @export
 configure_model.ezdm_3par <- function(model, data, formula) {
+  # construct brms formula from the bmm formula
   formula <- bmf2bf(model, formula)
   links <- model$links
 
+  # construct the family & add to formula object
   formula$family <- brms::custom_family(
     "ezdm_3par",
     dpars = c("mu", "drift", "bound", "ndt", "s"),
@@ -855,19 +874,20 @@ configure_model.ezdm_3par <- function(model, data, formula) {
     type = "real",
     log_lik = log_lik_ezdm_3par,
     posterior_predict = posterior_predict_ezdm_3par,
+    posterior_epred = posterior_epred_ezdm_3par,
     loop = TRUE,
     vars = c("vreal1[n]", "vint1[n]", "trials[n]")
   )
 
-  sc_path <- system.file("stan_chunks", package = "bmm")
-  stan_functions <- read_lines2(paste0(sc_path, "/ezdm_3par_functions.stan"))
-  stanvars <- brms::stanvar(scode = stan_functions, block = "functions")
+  # prepare initial stanvars to pass to brms, model formula and priors
+  stanvars <- brms::stanvar(scode = .ezdm_stan_functions("3par"), block = "functions")
 
+  # return the list
   nlist(formula, data, stanvars)
 }
 ```
 
-Note the `vars` argument in `custom_family` — it lists the additional response terms that the Stan likelihood needs access to.
+Note the `vars` argument in `custom_family` — it lists the additional response terms that the Stan likelihood needs access to. The Stan code comes from `.ezdm_stan_functions()`, which joins chunks shared by both versions (`ezdm_series.stan`, `ezdm_cumulants.stan`) with the version's own functions; a helper like this keeps shared Stan code in one file.
 
 ------------------------------------------------------------------------
 

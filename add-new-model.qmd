@@ -2,48 +2,43 @@
 
 If you have read [Section @sec-bmm-architecture] and [Section @sec-example-model], you should have a pretty good idea of how the `bmm` package functions. Now it's time to add your new model.
 
-The good news are, you don't have to add any of the files manually. The `bmm` package includes a function `use_model_template()` that generates all the files with templates for all necessary functions. Thus, you can focus on the important work of filling these templates with the relevant information without worrying about missing something critical.
+You don't have to create the files by hand. `use_model_template()` generates the model file with stubs for every method a model needs, so you can focus on filling them in. The chapter ends with a checklist of everything a new model has to touch *outside* its own file, because the test suite fails on some of those and review catches the rest.
 
 ## What `use_model_template()` does {.unnumbered}
 
 Run it from the root of the package. It writes `R/model_<model_name>.R` containing the parameter specification, the model constructor, the user-facing alias, and stub methods for `check_data`, `bmf2bf`, `configure_model` and `postprocess_brm`. With `custom_family = TRUE` it also creates one empty `inst/stan_chunks/<model_name>_<block>.stan` file per entry in `stanvar_blocks`, and wires the code that reads them into `configure_model`.
 
-The full argument list is on the [reference page for `use_model_template()`](../reference/use_model_template.html), which is generated from the function itself and is therefore never out of date. Four things about it are worth knowing before you call it:
+The full argument list is on the [reference page for `use_model_template()`](../reference/use_model_template.html). Three things about the call are worth knowing:
 
 -   **`versions` is the second positional argument.** `use_model_template("gcm", TRUE)` means `versions = TRUE`, not `custom_family = TRUE`. Name the arguments.
-
 -   **The stan files are created before the R file is written.** If the call fails partway through, empty `.stan` files are already on disk and you have to remove them by hand before you can call the function again.
+-   **An unversioned model gets `version = "NA"`** — the literal string, not `NA`.
 
--   **An unversioned model gets `version = "NA"`** — the literal string, not `NA`. That is what `print()` and the generated documentation will show unless you pass `versions`.
+### What the template leaves for you {.unnumbered}
 
--   **The template does not generate everything you may need.** There are no stubs for `check_formula()`, `configure_prior()` or `create_initfun()`; add those yourself only if your model needs them. The generated alias also omits the `@keywords bmmodel` tag, which the package's pkgdown test expects on a user-facing model alias — add it (see @sec-conventions).
+The generated file is a starting point that lags behind the package's conventions in a few places. Fix these before your first `check()`:
+
+-   **Add `#' @keywords bmmodel`** to the alias's roxygen block. The pkgdown test fails without it under `devtools::test()`; it is skipped inside `check()`, so do not rely on `check()` to catch it (see @sec-conventions).
+-   **Add an `sd` prior to every parameter.** The template emits only `main` and `effects`; see @sec-default-priors.
+-   **Add `log_lik`, `posterior_predict` and `posterior_epred`** to the `brms::custom_family()` call. The skeleton has none of them, and without them `loo()`, `pp_check()` and `posterior_epred()` fail on your model (step 8 below).
+-   **Add `...` to `postprocess_brm.<model>()`**, or delete the section. The generic is `postprocess_brm(model, fit, ...)` and the stub has only two arguments.
+-   **Uncomment or delete the `settable_links` stub, all of it.** If you leave it as generated, roxygen attaches its `#' @exportS3Method` line to the alias below it.
+
+There are no stubs for `check_formula()`, `configure_prior()`, `create_initfun()`, `revert_check_data()` or the optional post-fit methods; add those only if your model needs them.
 
 ## Example
 
-Let's add a new model called `gcm`. Let's assume that you have tested the model in Stan and you have the Stan code ready. We want to define a custom family for the `gcm` model, and we want to define the following blocks: `likelihood`, `functions` (see `?brms::stanvar` for an explanation of the blocks).
+Let's add a new model called `gcm`. Assume you have tested the model in Stan and have the Stan code ready. We want a custom family with two Stan blocks, `likelihood` and `functions` (see `?brms::stanvar` for the blocks).
 
-First you set up your system and git environment as described in [Section @sec-setup]. Then you can run the following code from R in the root directory of the `bmm` package:
+First set up your system and git environment as described in [Section @sec-setup]. Then load the development version with `devtools::load_all()` and run, from the root directory of the `bmm` package:
 
 ``` r
 use_model_template("gcm", custom_family = TRUE, stanvar_blocks = c("likelihood", "functions"))
 ```
 
-This will create the file `model_gcm.R` in the `R/` directory and the files `gcm_likelihood.stan` and `gcm_functions.stan` in the `inst/stan_chunks/` directory. The function will also open the files in your editor, through `usethis::edit_file()`. You will see the following output in the console:
-
-```         
-• Modify 'inst/stan_chunks/gcm_likelihood.stan'
-• Modify 'inst/stan_chunks/gcm_functions.stan'
-• Modify 'R/model_gcm.R'
-```
-
-Now you can fill the files with the appropriate code. The Stan files will be empty, but the R file will have the following structure:
+This creates `R/model_gcm.R` and the empty files `inst/stan_chunks/gcm_likelihood.stan` and `inst/stan_chunks/gcm_functions.stan`, and opens them in your editor. The top of the R file holds the specification and the constructor:
 
 ``` r
-#############################################################################!
-# MODELS                                                                 ####
-#############################################################################!
-# see 'R/model_ddm.R' (flat defaults) or 'R/model_cswald.R' (versioned) for examples
-
 .gcm_defaults <- list(
   parameters = list(
     par1 = "Parameter 1 = description of parameter 1",
@@ -66,9 +61,8 @@ Now you can fill the files with the appropriate code. The Stan files will be emp
   )
 )
 
-
 .model_gcm <- function(resp_var1 = NULL, required_arg1 = NULL, required_arg2 = NULL,
-                                  links = NULL, call = NULL, ...) {
+                       links = NULL, call = NULL, ...) {
   out <- structure(
     list(
       resp_vars = nlist(resp_var1),
@@ -88,186 +82,91 @@ Now you can fill the files with the appropriate code. The Stan files will be emp
     class = c("bmmodel", "gcm"),
     call = call
   )
-  out$links[names(links)] <- links
+  out <- set_links(out, links)
   out
 }
-# user facing alias
-# information in the title and details sections will be filled in
-# automatically based on the information in the .model_gcm()$info
 
-#' @title `r .model_gcm()$name`
-#' @name gcm
-#' @details `r model_info(.model_gcm())`
-#' @param resp_var1 A description of the response variable
-#' @param required_arg1 A description of the required argument
-#' @param required_arg2 A description of the required argument
-#' @param links A list of links for the model parameters.
-#' @param ... used internally for testing, ignore it
-#' @return An object of class `bmmodel`
-#' @export
-#' @examples
-#' \dontrun{
-#' # put a full example here (see 'R/model_ddm.R' for an example)
-#' }
-gcm <- function(resp_var1, required_arg1, required_arg2, links = NULL, ...) {
-   call <- match.call()
-   stop_missing_args()
-   # uncomment if your model requires a specific backend:
-   # stopif(!requireNamespace("cmdstanr", quietly = TRUE),
-   #        'The "cmdstanr" package is required for this model.')
-   .model_gcm(resp_var1 = resp_var1, required_arg1 = required_arg1, required_arg2 = required_arg2,
-                links = links, call = call, ...)
-}
-
-#############################################################################!
-# CHECK_DATA S3 methods                                                  ####
-#############################################################################!
-# A check_data.* function should be defined for each class of the model.
-# If a model shares methods with other models, the shared methods should be
-# defined in helpers-data.R. Put here only the methods that are specific to
-# the model. See ?check_data for details.
-# (YOU CAN DELETE THIS SECTION IF YOU DO NOT REQUIRE ADDITIONAL DATA CHECKS)
-
-#' @export
-check_data.gcm <- function(model, data, formula) {
-   # retrieve required arguments
-   required_arg1 <- model$other_vars$required_arg1
-   required_arg2 <- model$other_vars$required_arg2
-
-   # check the data (required)
-
-   # compute any necessary transformations (optional)
-
-   # save some variables as attributes of the data for later use (optional)
-
-   NextMethod('check_data')
-}
-
-#############################################################################!
-# Convert bmmformula to brmsformla methods                               ####
-#############################################################################!
-# A bmf2bf.* function should be defined if the default method for constructing
-# the brmsformula from the bmmformula does not apply (e.g if aterms are required).
-# The shared method for all `bmmodels` is defined in bmmformula.R.
-# See ?bmf2bf for details.
-# (YOU CAN DELETE THIS SECTION IF YOUR MODEL USES A STANDARD FORMULA WITH 1 RESPONSE VARIABLE)
-
-#' @export
-bmf2bf.gcm <- function(model, formula) {
-   # retrieve required response arguments
-   resp_var1 <- model$resp_vars$resp_var1
-   resp_var2 <- model$resp_vars$resp_arg2
-
-   # set the base brmsformula based
-   brms_formula <- brms::bf(paste0(resp_var1, " | ", vreal(resp_var2), " ~ 1"))
-
-   # return the brms_formula to add the remaining bmmformulas to it.
-   brms_formula
-}
-
-#############################################################################!
-# CONFIGURE_MODEL S3 METHODS                                             ####
-#############################################################################!
-# Each model should have a corresponding configure_model.* function. See
-# ?configure_model for more information.
-
-#' @export
-configure_model.gcm <- function(model, data, formula) {
-   # retrieve required arguments
-   required_arg1 <- model$other_vars$required_arg1
-   required_arg2 <- model$other_vars$required_arg2
-
-   # retrieve arguments from the data check
-   my_precomputed_var <- attr(data, 'my_precomputed_var')
-
-   # construct brms formula from the bmm formula
-   formula <- bmf2bf(model, formula)
-
-   # construct the family & add to formula object
-   gcm_family <- brms::custom_family(
-     'gcm',
-     dpars = c(),
-     links = c(),
-     lb = c(), # upper bounds for parameters
-     ub = c(), # lower bounds for parameters
-     type = '', # real for continous dv, int for discrete dv
-     loop = TRUE, # is the likelihood vectorized
-   )
-   formula$family <- gcm_family
-
-   # prepare initial stanvars to pass to brms, model formula and priors
-   sc_path <- system.file('stan_chunks', package='bmm')
-   stan_likelihood <- read_lines2(paste0(sc_path, '/gcm_likelihood.stan'))
-   stan_functions <- read_lines2(paste0(sc_path, '/gcm_functions.stan'))
-
-   stanvars <- stanvar(scode = stan_likelihood, block = 'likelihood') +
-      stanvar(scode = stan_functions, block = 'functions')
-
-   # return the list
-   nlist(formula, data, stanvars)
-}
-#############################################################################!
-# POSTPROCESS METHODS                                                    ####
-#############################################################################!
-# A postprocess_brm.* function should be defined for the model class. See
-# ?postprocess_brm for details
-
-#' @export
-postprocess_brm.gcm <- function(model, fit) {
-   # any required postprocessing (if none, delete this section)
-   fit
-}
+# uncomment if configure_model() builds the links into the family or into
+# the non-linear formulas rather than reading them from the list above,
+# so that a link set by the user is refused instead of silently ignored:
+#' @exportS3Method
+# settable_links.gcm <- function(model) character(0)
 ```
 
-Now you have to:
+Below that come the user-facing alias `gcm()` with its roxygen block, and the stubs `check_data.gcm()`, `bmf2bf.gcm()`, `configure_model.gcm()` (with a `custom_family()` skeleton and the lines that read your two Stan files) and `postprocess_brm.gcm()`. Each stub except `configure_model` carries a header comment saying when you may delete it.
 
-1.  **Fill the `.gcm_defaults` specification and the `.model_gcm` constructor.** Most of your work is in `.gcm_defaults`: specify the model's parameters (with descriptions), their link functions, which parameters are fixed (and to what value), the default priors, and the initialization ranges. It's crucial that you set default priors for every parameter, informed by knowledge in the field — see `.ddm_defaults` in `model_ddm.R` for a worked example. In `.model_gcm()`, rename the response and required arguments (or delete the extras if you have none) and fill in the metadata (`domain`, `task`, `name`, `citation`, `requirements`). The constructor lists every field of the model object inline and reads the parameter specification from `.gcm_defaults`; its class must be `c('bmmodel', 'gcm')`.
+For a complete model written to the current conventions, read `R/model_sdt_yn.R`: a custom family on aggregated counts, with its own `log_lik`, `posterior_predict` and `posterior_epred` functions and a `settable_links` method. Most of its length is documentation.
 
-    If your model has multiple versions with different parameter sets, generate the scaffold with `use_model_template("gcm", versions = c("v1", "v2"))`. Instead of the flat `.gcm_defaults`, this produces a `.gcm_version_table` with one entry per version; a constructor that reads each field out of it (`parameters = .gcm_version_table[[version]][["parameters"]]`, and so on) and appends `paste0("gcm_", version)` to the class vector; and an alias whose `version` argument is validated with `match.arg()`.
+## Filling in the template
 
-    The released versioned models do not all validate `version` this way, so do not read one of them as the norm. `cswald()` uses `match.arg()` as the template does (`R/model_cswald.R:177`), `m3()` checks the string with `stopif()` (`R/model_m3.R:183-186`), and `ezdm()` does not validate in the constructor at all — an unknown version reaches `check_data.ezdm()` and errors there (`R/model_ezdm.R:200`). Use the template's `match.arg()` for a new model: it rejects the bad value where the user typed it.
+1.  **The specification and the constructor.** Most of your work is in `.gcm_defaults`: the parameters (with descriptions), their links, which parameters are fixed and to what value, the default priors, and the initialization ranges. Set default priors (`main`, `effects` and `sd`) for every parameter, informed by knowledge in the field; `.ddm_defaults` in `R/model_ddm.R` is a worked example. Give `init_ranges` only to parameters whose likelihood is undefined in part of their range, such as a non-decision time that must stay below the fastest RT (see @sec-init-ranges). Prefer parameter names of more than one letter that do not match a likely data column (see [Failure modes to expect]).
 
-2.  **Adjust the user-facing alias.** Here you should only rename the required arguments and fill in the `@examples` section with a full example. Everything else will be filled in automatically based on the information in the `.model_gcm` function.
+    In `.model_gcm()`, rename the response and required arguments and fill in the metadata (`domain`, `task`, `name`, `citation`, `requirements`). Two things about the constructor are checked by tests: it must run with **no arguments** (the tests call every `.model_*()` bare, which is why every argument defaults to `NULL`), and its fields must stay in the **order the template emits them**. For `domain`, reuse the string of the models your model sits with, so that `supported_models()` and the website list it under the right task group: `"Visual working memory"`, `"Working Memory (categorical), Categorical Decision Making"`, `"Perception & Recognition Memory"` (or `"Recognition Memory"`, which lands in the same group) or `"Decision Making / Response times"`. A new string becomes a group of its own.
 
-3.  **Fill the `check_data.gcm` function** with the appropriate code. This function should check the data and return the data. You may or may not need to compute any transformations or save some variables as attributes of the data.
+    For a model with several versions, generate the scaffold with `use_model_template("gcm", versions = c("v1", "v2"))`. You get a `.gcm_version_table` with one entry per version, a constructor that reads each field from it and appends `paste0("gcm_", version)` to the class, and an alias with `version = c("v1", "v2")` validated by `match.arg()`. Keep the default as a literal `c(...)`: `model_versions()` reads it to build the per-version documentation tables.
 
-4.  **If necessary, define the `bmf2bf.gcm` method** to convert the `bmmformula` to a `brmsformula`. You need a custom `bmf2bf` method if:
+2.  **Links.** The constructor passes the user's `links` through `set_links()`, which refuses names that are not parameters, repairs one-letter typos with a warning, and warns when a link widens the parameter's range (say `identity` instead of `log`). By default every link in your `links` list can be changed by the user. If `configure_model()` writes a link into the family, the Stan code or the non-linear formulas instead of reading it from the list, a user's choice would be silently ignored, so declare which links can be set:
 
-    -   Your model has **multiple response variables** (e.g., DDM needs `rt | dec(response) ~ 1`)
-    -   Your model uses **aggregate data** with `vreal()`, `vint()`, `trials()` (e.g., EZDM)
-    -   Your model needs special response wrapping
+    ``` r
+    #' @exportS3Method
+    settable_links.gcm <- function(model) character(0)   # or c("par1")
+    ```
 
-    Keep in mind that `brms` automatically interprets this formula as the linear model formula for the `mu` parameter of your custom family. If your model does not have a natural `mu` parameter, suppress it: include `mu = 0` in `fixed_parameters`, add a dummy `mu` (identity link) to the family's `dpars`, and write the first formula line yourself (as DDM does with `rt | dec(response) ~ 1`). See the DDM example in [Section @sec-example-model] and the *Suppressing `mu`* section of the architecture chapter for details. *If your model has a single response variable and no special wrapping, you can delete this section.*
+    Name the method for your model class, not for `bmmodel`, which comes first in every class vector and would shadow it. A model that substitutes the inverse link into its formulas itself also overrides `settable_link_functions()`; the multinomial SDT models are the examples.
 
-5.  **Fill the `configure_model.gcm` function** with the appropriate code. This function should construct the formula, the family, and the stanvars, and return them as `nlist(formula, data, stanvars)`. Note that `configure_model` does **not** return initial values — initialization is handled separately by `create_initfun()` using the `init_ranges` field in your model definition.
+3.  **The user-facing alias.** Rename the required arguments, fill in `@examples` with a full example, and add `@keywords bmmodel`. Title and details are generated from the constructor.
 
-    You need to fill information about your custom family, and then fill the STAN files with your STAN code. Conveniently, loading the STAN files and setting up the stanvars is set up automatically when calling the `use_model_template` function. Should you need to add more STAN files after you created the template, you can add the files in `inst/stan_chunks/` manually and edit those lines to additionally load the manually added files.
+4.  **`check_data.gcm()`** checks the data and returns it, ending with `NextMethod("check_data")`. It may compute transformations or store values as data attributes for `configure_model` (see @sec-attribute-bridge). If it adds, renames or packs columns, `update()` needs to undo that before it can re-run it on a fitted model's data; see @sec-revert-check-data.
 
-6.  **Define `init_ranges` if needed.** If your model uses a custom family (especially RT models), you should define `init_ranges` in your model definition to provide plausible starting ranges for MCMC sampling. This is particularly important for models where parameters have hard constraints relative to observed data -- for example, non-decision time must be less than the fastest observed RT, otherwise the likelihood is undefined. The `create_initfun()` step will automatically use these to generate an initialization function. Each entry maps a parameter name to a `c(lower, upper)` range. If `init_ranges` is `NULL`, brms' default initialization is used.
+5.  **`bmf2bf.gcm()`, if needed.** You need a custom method if your model has several response variables (DDM: `rt | dec(response) ~ 1`), uses aggregate data through `vreal()`, `vint()` or `trials()` (EZDM, `sdt_yn`), or needs other response wrapping. brms reads this formula as the linear model for the family's `mu`. If your model has no natural `mu`, suppress it: put `mu = 0` in `fixed_parameters`, add a dummy `mu` (identity link) to the family's `dpars`, and write the first formula line yourself (see @sec-suppress-mu). Leave the dummy `mu` out of `parameters`, so that `prior_info()` and `parameter_info()` do not report it.
 
-7.  **Fill the `postprocess_brm.gcm` function** with the appropriate code. By post-processing, we mean changes to the fitted brms model - like renaming parameters, etc. If you don't need any post-processing, you can delete this section.
+6.  **`configure_model.gcm()`** builds the formula, the family and the stanvars and returns `nlist(formula, data, stanvars)`. It does not return initial values. brms connects the family to your Stan code by name: a custom family `"gcm"` with `dpars = c("mu", "par1", "par2")` calls a Stan function `gcm_lpdf(y | mu, par1, par2)` (`gcm_lpmf` for an integer response) that you define in `gcm_functions.stan`. The SDM and DDM methods in @sec-example-model show the whole pattern, and the [brms custom families vignette](https://cran.r-project.org/web/packages/brms/vignettes/brms_customfamilies.html) explains it. Add further Stan files to `inst/stan_chunks/` and read them here. If your Stan code has to differ when the user asks for within-chain threading, see @sec-threading.
 
-8.  **Define `log_lik` and `posterior_predict` functions** if your model uses a custom family. These R functions must be passed to `brms::custom_family()` and enable posterior predictive checks, model comparison (via LOO/WAIC), and `posterior_predict()`. They should use the `d*()` and `r*()` distribution functions from `R/distributions.R`. See the DDM example in [Section @sec-example-model].
+7.  **`postprocess_brm.gcm()`** changes the fitted object (renaming parameters and the like). Delete the section if you need none.
+
+8.  **`log_lik`, `posterior_predict` and `posterior_epred`**, for a custom family. These are plain R functions passed to `brms::custom_family()`; their contracts are in @sec-conventions. They power LOO and WAIC, posterior predictive checks, and `posterior_epred()`/`fitted()`. Build them on `d*()` and `r*()` functions for your model in `R/distributions.R`, which you write first (see [Distribution functions]). If the mean of your response is not a useful quantity, pass `posterior_epred_undefined("gcm")`, as SDM does, so the user gets an error that points to `native_parameters()`. Models built on a native brms family (`brms::mixture()`, `brms::multinomial()`) get all three from brms.
+
+## Before you open the pull request
+
+Everything below lives outside your model file.
+
+**The test suite fails without these:**
+
+-   An entry in `data_column_roles` (`R/helpers-model.R`) labelling each alias argument without a default: what the data column holds, in a few words. Use `<model>_<version>` keys where versions differ, and `NA` for an argument that names no column. Copy the entry of a similar model. The *Get started* article builds its model tables from it.
+-   A case in `stored_frame_cases()` in `tests/testthat/test-update.R` (a model, a formula and a small dataset, like the cases already there), and a `revert_check_data()` method if your `check_data()` changes columns (@sec-revert-check-data).
+-   Your model working in the loop of `"check_data() returns a data.frame()"` in `tests/testthat/test-helpers-data.R`. The loop calls every constructor with a shared set of arguments and a shared data frame; add a branch for your model if those do not fit it, as `sdt_ranking` and `sdt_cdp` have, or exclude it with a pointer to its own test, as `sdt_rating` is.
+-   `@keywords bmmodel` on the alias, and a constructor that runs without arguments and keeps the template's field order.
+
+**Review expects these:**
+
+-   A branch in `response_annotations()` (`R/helpers-model.R`) giving the coding each response variable needs ("radians in \[-pi, pi\]", "seconds"). `print()` shows it next to each response.
+-   A `domain` that places the model in the right task group (step 1).
+-   A test file, a parameter recovery study, an example dataset, an article, and a `NEWS.md` entry (below and @sec-conventions).
+
+**Optional extension points.** The defaults cover most models; implement one only when its condition applies.
+
+| Method | Implement when | Example |
+|-------------------------|-----------------------------|-----------------|
+| `pp_observables()`, `pp_simulate()` | the likelihood has more than one observable (RT and choice, counts and means), so `pp_check()` should check each. Add the model to `registered_models` in `test-pp_observables.R`. | `R/model_ddm.R` |
+| `native_transform()` | the map from sampling to native scale is not elementwise `links` plus at most one softmax group, or depends on the design | `native_transform.non_targets()` |
+| `data_check_findings()` | users commonly make a data mistake that `check_data()` tolerates; `bmm_data_check()` reports it | `data_check_findings.circular()` |
+| `create_initfun()`, `configure_prior()` | `init_ranges` and `default_priors` cannot express what the model needs | `create_initfun.m3()` |
+
+A model fitted to aggregated counts can also be added to `uses_aggregate_data()` in `R/data_check.R` (currently `m3` and `ezdm`), so that `bmm_data_check()` does not note too few observations per cell.
 
 ## Failure modes to expect
 
-Five things in 1.3.2 will bite you while the model is still half-written. All of them are new or newly strict, so an older model file will not warn you about them.
+**`configure_prior()` errors if `fixed_parameters` names a parameter the formula never gets.** Every name in `fixed_parameters` has to be wired into the formula by your `configure_model()`, as either a distributional parameter or a non-linear one. This is the error you get when you add `mu = 0` to `fixed_parameters` but forget the dummy `mu` in the family's `dpars`.
 
-**`configure_prior()` errors if `fixed_parameters` names a parameter the formula never gets.** Every name in `fixed_parameters` has to be wired into the formula by your `configure_model()`, as either a distributional parameter or a non-linear one. If it is neither, bmm stops with a model-definition error rather than letting a malformed `b_Intercept ~ constant()` prior reach `brm()` (#377, `R/helpers-prior.R:165-174`). This is the error you get when you add `mu = 0` to `fixed_parameters` but forget to put a dummy `mu` in the family's `dpars`.
+**Short parameter names are risky.** `create_initfun()` maps Stan parameter names back to your model parameters with the regex `(^|_)param(_|$)`, taking the longest match. A parameter called `s` therefore matches `b_s_Intercept` but not `b_sim_Intercept`. A name that is a substring of another is safe; a name that appears as a whole underscore-delimited token elsewhere in the Stan parameter names is not.
 
-**Short parameter names are risky, and the rule is a word boundary.** `create_initfun()` has to map Stan parameter names back to your model parameters to know which `init_ranges` entry applies. It matches with the regex `(^|_)param(_|$)` and takes the longest match when several apply (#354, #355, `R/helpers-inits.R:75-87`). So a parameter called `s` matches `b_s_Intercept` but not `sd_id__sim`, which is the point — before 1.3.2 this was a substring match and `s` collided with `sim`. Two consequences for naming: a parameter name that is a substring of another is now safe, but a name that appears as a whole underscore-delimited token somewhere else in the Stan parameter names is not. If nothing matches at all, the fallback is the first underscore-delimited token of the Stan name, which is usually wrong and silently so.
+**A predictor that is also a parameter name and also a data column warns.** bmm decides whether a formula component is non-linear by whether one of its predictors is also a predicted parameter. When the same name is a data column too, that choice changes the likelihood without the user seeing it, so `check_formula()` warns. One-letter parameters collide with columns like a condition coded `c`; another reason to avoid them.
 
-**A parameter that is not a dpar is looked up in `nlpars`.** `create_initfun()` resolves each parameter's terms as `bterms$dpars[[parameter]] %||% bterms$nlpars[[parameter]]` (`R/helpers-inits.R:56`). Before #362 it only looked in `dpars`, and a model built as a non-linear brms formula — a native-multinomial model, for instance — failed with `no applicable method for 'has_intercept' applied to an object of class "NULL"`. If you see that error on an older bmm, this is what it was.
-
-**A predictor that is also a parameter name and also a data column now warns.** bmm decides whether a formula component is non-linear purely by whether one of its predictors is also a predicted parameter, and emits `nlf()` rather than `lf()` in that case. When the same name is also a column in the data, that choice changes the likelihood and the user has no way to see it. `check_formula.bmmodel` warns (#378, `R/bmmformula.R:165-180`). Short parameter names collide naturally with column names like `accuracy` or a condition coded `c`, which is another reason to avoid one-letter parameters in a new model.
-
-**Add your model to `response_annotations()`.** Since #392, `print.bmmodel()` shows the required response variables with the coding they expect ("radians in [-pi, pi]", "seconds") and the default links, which answers "what does my data frame need to look like?" at the console. The annotations come from `response_annotations()` (`R/helpers-model.R:184-205`), a lookup keyed on the model's class. A model whose class is not in that chain falls through to an empty list and prints its response variables bare. Add a branch for your class.
+**Method signatures follow the generics.** `bmm()` calls `create_initfun()` with the prior as a fourth argument, so a method written as `function(model, data, formula)` fails on every fit. `configure_prior()` methods receive `data2`, `knots` or `drop_unused_levels` through `...` when the user passes them, so a method without `...` fails only then, which is the case nobody tests. `R CMD check` flags both. The full table is in @sec-bmm-architecture.
 
 ## Testing
 
-Unit testing is extremely important. You should test your model with the `testthat` package. You can use the `use_test()` function to create a test file for your model. See files like `tests/testthat/test-model_ddm.R` or `tests/testthat/test-model_cswald.R` for examples of how we test models. BRMS models take a long time to fit, so we don't test the actual fitting process.
-
-Instead we use brms' mock backend. This is not a bmm feature — `backend = "mock"` and `mock_fit` are arguments of `brms::brm()`, and they reach it because `bmm()` passes `...` through. The whole backend is two lines: whatever you pass as `mock_fit` is returned in place of the fitted Stan object (a function is called first). Everything before the fit — data checks, formula translation, family construction, stanvars, initial values — runs for real, which is exactly what you want to test. For example, here's a mock test pattern:
+Test your model with `testthat`; `use_test()` creates the file. `tests/testthat/test-model_ddm.R` and `test-model_sdt_yn.R` show how models are tested. Fitting takes too long for the test suite, so pipeline tests use brms' mock backend. `backend = "mock"` is a `brms::brm()` argument, and `mock_fit` reaches brms' mock backend through `brm()`'s `...`, just as both reach `brm()` through `bmm()`'s `...`: whatever you pass as `mock_fit` is returned in place of the fitted Stan object. Everything before the fit — data checks, formula translation, family construction, stanvars, priors, initial values — runs for real, which is what you want to test:
 
 ``` r
 test_that("gcm model runs without errors", {
@@ -280,7 +179,7 @@ test_that("gcm model runs without errors", {
     category = rep(c(1, 2), each = 5)
   )
 
-  f <- bmmformula(param1 ~ 1, param2 ~ 1)
+  f <- bmmformula(par1 ~ 1, par2 ~ 1)
   mock_fit <- bmm(
     f, dat,
     gcm(resp_var1 = "resp", required_arg1 = "exemplar", required_arg2 = "category"),
@@ -290,44 +189,37 @@ test_that("gcm model runs without errors", {
 })
 ```
 
-Two things about that call are easy to get wrong. The alias generated by the template calls `stop_missing_args()`, so every argument without a default has to be supplied — a test that passes only the response variable errors before it reaches the pipeline. And the argument is `mock_fit`, not `mock`. You will see `mock = 1` in the existing test files (48 occurrences against 21 of `mock_fit = 1` in 1.3.2); it works only because R partial-matches it to `mock_fit` on the way through `...`. Write `mock_fit`.
+Two things about that call are easy to get wrong. The alias calls `stop_missing_args()`, so every argument without a default has to be supplied. And the argument is `mock_fit`. Older test files write `mock = 1`, which works only because R partial-matches it to `mock_fit` on the way through `...`.
 
-The tests based on the `testthat` package are run every time you call the `check()` command. Before you submit your changes, make sure that all tests pass.
+`tests/testthat/helper-epred.R` provides `epred_vs_predict()` and `expect_epred_by_cell()` for testing a `posterior_epred` function against the mean of `posterior_predict`. If your Stan code switches on threading, test the generated code with and without `threads`, as `test-model_sdm-stancode.R` does.
+
+The tests run with every `check()`. Make sure all of them pass before you submit.
 
 ### Parameter recovery
 
-Additionally, you should perform a full test of the model by running it in a separate script and ensuring it gives meaningful results. At the very least, you should perform basic parameter recovery simulations for hyper-parameters (i.e., means and standard deviations) as well as subject-level parameters to give users an idea of how much data they need to adequately estimate the model. @sec-conventions covers what the study has to show — in particular why you must not simulate and fit with the same distribution function — and how to report it.
+Also run the model in a separate script on simulated data and check that it recovers the parameters: the hyper-parameters (means and standard deviations) and the subject-level parameters, with enough conditions to tell users how much data they need. @sec-conventions covers what the study has to show, in particular why you must not simulate and fit with the same distribution function, and how to report it.
 
 ### Distribution functions
 
-If your model uses a custom family, you should also add distribution functions (`d*`, `r*`, and optionally `p*`, `q*`) to `R/distributions.R`. These are used for:
-
--   Data simulation (useful for parameter recovery and examples)
--   Posterior predictive checks via the `log_lik` and `posterior_predict` functions
--   Plotting model fits
+A custom family also needs distribution functions in `R/distributions.R`: `d*` and `r*`, optionally `p*` and `q*`. They are used to simulate data, inside `log_lik`, `posterior_predict` and `posterior_epred`, and for plotting.
 
 ## Post-processing infrastructure
 
-The bmm package provides several post-processing tools that work automatically for most models:
+Most of the post-fit tools read the model object and need no code from you:
 
--   **`conditional_effects()`** — visualize marginal effects of predictors on model parameters. Works automatically via the bmmfit class.
--   **`emmeans` integration** — estimated marginal means via the emmeans package. Works automatically.
--   **`pp_check()`** — posterior predictive checks. Works automatically for standard families; custom support exists for multinomial families (like M3).
-
-For these to work with your custom family, you need to have defined `log_lik` and `posterior_predict` functions and passed them to `brms::custom_family()`. No additional code is typically needed in your model file.
+-   **`conditional_effects()`** and the **`emmeans`** integration work through the `bmmfit` class.
+-   **`native_parameters()`** returns posterior draws of the parameters on their native scale, using your `links` through the default `native_transform()` method.
+-   **`parameter_info()`** and **`prior_info()`** read `parameters`, `fixed_parameters`, `links` and the default priors. A parameter in `fixed_parameters` but not in `parameters` (a dummy `mu`) is treated as family machinery and left out of the `prior_info()` report.
+-   **`posterior_epred()`** and **`fitted()`** call the `posterior_epred` function of your family. Models with class `"circular"` refuse them, because the mean of a circular error is not useful.
+-   **`pp_check()`** checks the brms response by default; `pp_observables()` extends it to further observables.
+-   **`bmm_data_check()`** runs your `check_data()` without compiling and adds anything your `data_check_findings()` method reports.
 
 ## Add an example dataset
 
-All new models should come with an example dataset, that can be loaded by users and can be used in the examples section. This should be either:
-
--   A new dataset that you add to the package
--   A dataset that already exists in the package but that can be used with the new model
--   A dataset that exists in another package that you can load with `data()` and use with the new model
-
-For example, the vignettes for the `mixture2p` and `mixture3p` use an external dataset from the `mixtur` package that can be loaded with `data('bays2009_full', package='mixtur')`. The `IMM` models use a dataset included in the current package. For instructions on how to add a new dataset see [here](https://r-pkgs.org/data.html).
+Every new model needs an example dataset that users can load and that the examples use. It can be a new dataset added to the package, one already in the package, or one from another package loaded with `data()`. The `mixture2p` and `mixture3p` articles use `data('bays2009_full', package='mixtur')`; the IMM and the SDT models use datasets shipped with bmm. For how to add one, see [R Packages](https://r-pkgs.org/data.html).
 
 ## Add an article
 
-All new models should come with an article that explains some basic information about the model and how to estimate it with `bmm`. You can use the `use_article()` function to create a new article. See [here](https://r-pkgs.org/vignettes.html) for more information. The articles will be published automatically on the package website under "Articles" when the pull request is approved. You can browse the source code for the existing articles in the `vignettes/articles/` directory. You can see the published version of the existing vignettes [here](../articles/).
+Every new model needs an article explaining the model and how to fit it with `bmm`. Create it with `use_article()` (see [R Packages](https://r-pkgs.org/vignettes.html)); the existing ones are in `vignettes/articles/`, and the published versions are [here](../articles/). The README, the home page and the *Get started* tables list your model automatically, from its constructor and its `data_column_roles` entry.
 
-And that's it! You have added a new model to the `bmm` package. You can now submit your changes to the `bmm` package repository.
+Then submit your pull request.
