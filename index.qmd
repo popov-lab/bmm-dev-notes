@@ -1,12 +1,12 @@
 # Overview {.unnumbered}
 
-*Last update: 16.09.2026*
+*Last update: 03.10.2026*
 
 This guide aims to help developers contribute new models to bmm. It is a work in progress and will be updated as the package evolves. It explains how to set-up your system for package development, the structure of the package, and the workflow for contributing new models to the package.
 
-The bmm package now supports models across multiple domains, including visual working memory models (mixture models, IMM, SDM), response time / decision models (DDM, EZDM, Censored-Shifted Wald), and categorical response models (M3). The package requires **R \>= 4.1.0** and uses the native pipe operator `|>` throughout. Further models are in development on feature branches; they are not part of a release and not covered here until they are.
+The bmm package supports models for four kinds of tasks: continuous reproduction (mixture models, IMM, SDM), categorical recall and n-AFC decisions (M3), detection, recognition and confidence judgments (the signal detection models), and choices with response times (DDM, EZDM, Censored-Shifted Wald). `supported_models()` lists them. The package requires **R \>= 4.1.0** and uses the native pipe operator `|>` throughout. Further models are in development on feature branches; they are not part of a release and not covered here until they are.
 
-This guide describes bmm at the **v1.3.2** tag. Anything merged after that tag may not be reflected here yet, and the version on CRAN can lag behind the tag while a submission is being processed. If you run into problems, don't hesitate to [open an issue on github](https://github.com/popov-lab/bmm/issues).
+This guide describes bmm at the **v1.4.0** tag. Anything merged after that tag may not be reflected here yet, and the version on CRAN can lag behind the tag while a submission is being processed. If you run into problems, don't hesitate to [open an issue on github](https://github.com/popov-lab/bmm/issues).
 
 We follow a [github flow workflow](https://jeffkreeftmeijer.com/git-flow/). The repository contains two main branches:
 

@@ -50,6 +50,10 @@ jobs:
           use-public-rspm: true
 
       - name: Run the drift check
+        # An explicit `shell: bash` runs with -o pipefail. The default shell
+        # does not, so the exit status of the pipe below was tee's and a
+        # failed check passed.
+        shell: bash
         run: |
           Rscript tools/check-drift.R \
             --bmm bmm-checkout \

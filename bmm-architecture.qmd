@@ -17,11 +17,18 @@ bmm <- function(formula, data, model,
   deprecated_args(...)
   dots <- list(...)
   local_brms_threads(dots)
+  file <- check_rds_file(file)
+  file_refit <- validate_file_refit(file_refit)
 
-  # check if the model has been previously fit and return it if requested
-  x <- try_read_bmmfit(file, file_refit)
-  if (!is.null(x)) {
-    return(x)
+  # check if the model has been previously fit and return it if requested.
+  # "on_change" cannot be answered here -- it needs the Stan code and data that
+  # only exist further down -- so it is checked where brms checks it, after
+  # code and data generation and before compilation
+  if (file_refit == "never") {
+    x <- try_read_bmmfit(file)
+    if (!is.null(x)) {
+      return(x)
+    }
   }
 
   # set temporary global options and return modified arguments for brms
@@ -43,14 +50,38 @@ bmm <- function(formula, data, model,
   config_args <- configure_model(model, data, formula)
 
   # configure the default prior and combine with user-specified prior
-  prior <- configure_prior(model, data, config_args$formula, prior)
+  frame_args <- brms_frame_args(dots)
+  prior <- brms::do_call(configure_prior, c(list(model, data, config_args$formula, prior), frame_args))
 
-  # configure initial values if necessary
-  config_args$init <- create_initfun(model, data, config_args$formula)
+  # configure initial values; the prior decides which parameters exist
+  config_args$init <- brms::do_call(
+    create_initfun, c(list(model, data, config_args$formula, prior), frame_args)
+  )
 
   # estimate the model
   fit_args <- combine_args(nlist(config_args, opts, dots, prior))
-  fit <- brms::do_call(brms::brm, fit_args)
+  fit_args$control <- configure_control(
+    fit_args$control,
+    opts$backend %||% getOption("brms.backend", "rstan"),
+    fit_args$algorithm %||% getOption("brms.algorithm", "sampling")
+  )
+
+  if (file_refit == "on_change") {
+    x <- try_read_bmmfit(file)
+    if (!is.null(x)) {
+      # a cached fit too old for restructure() to bring forward is precisely one
+      # "on_change" should replace, so its error refits rather than aborting
+      x <- try(restructure(x), silent = TRUE)
+      if (!is_try_error(x) && !bmmfit_needs_refit(x, fit_args, silent)) {
+        return(x)
+      }
+    }
+  }
+
+  fit <- withCallingHandlers(
+    brms::do_call(brms::brm, fit_args),
+    error = add_setup_hint
+  )
 
   # model post-processing
   fit <- postprocess_brm(
@@ -68,17 +99,19 @@ bmm <- function(formula, data, model,
 It calls several subroutines, implemented as generic S3 methods, to:
 
 -   `configure_options()` - configure local options for fitting, such as parallel sampling
--   `check_model()` - check if the model exists and is valid
+-   `check_model()` - check if the model exists and is valid, including the user's `links`
 -   `check_data()` - check whether the data contains all necessary information and transform it
 -   `check_formula()` - check if the formula is specified correctly
 -   `configure_model(model, data, formula)` - configure the model specification (formula, family, Stan code) to pass to brms
 -   `configure_prior()` - set the default priors for the model and combine them with the user prior
--   `create_initfun()` - create an initial values function for MCMC sampling
+-   `create_initfun()` - create an initial values function for MCMC sampling. It receives the final prior, because a parameter the prior holds constant does not exist in the Stan code and must get no initial value
 -   `postprocess_brm()` - post-process the fitted model (e.g., adjust link functions, add metadata)
 
-In addition, it also tests if the specified `bmmodel` has already been estimated and saved to a `file`. This is done via the `try_read_bmmfit` and `try_save_bmmfit` functions.
+`brms_frame_args(dots)` picks out the `brm()` arguments that change the model frame (`data2`, `knots`, `drop_unused_levels`) and hands them to the two steps that ask brms about the model before the fit.
 
-The first line worth a second look is `local_brms_threads(dots)`. `threads` is a `brms::brm()` argument and reaches it through `...` like any other, so `bmm()` does not need to know about it — except that a model may need to *generate different Stan code* when threading is on. `local_brms_threads()` (`R/utils.R:128`) normalizes whatever the user passed (a bare number becomes `brms::threading(n)`) and sets the `brms.threads` option for the duration of the call, so that a `configure_model()` method further down the pipeline can read it. Only `sdm` does this today; see [Within-chain threading].
+The fitted model is cached when the user passes `file`. With `file_refit = "on_change"`, the cached fit is reused only if the Stan code and data are unchanged, which is why that comparison sits after configuration, just before `brm()`. One consequence for you: `configure_model()` must generate the same Stan code for the same inputs.
+
+The first line worth a second look is `local_brms_threads(dots)`. `threads` is a `brms::brm()` argument and reaches it through `...` like any other, so `bmm()` does not need to know about it — except that a model may need to *generate different Stan code* when threading is on. `local_brms_threads()` normalizes whatever the user passed (a bare number becomes `brms::threading(n)`, `threads = NULL` turns threading off) and sets the `brms.threads` option for the duration of the call, so that a `configure_model()` method further down the pipeline can read it. See @sec-threading.
 
 ## The `bmmformula` class
 
@@ -120,8 +153,8 @@ All models in the package are defined as S3 classes and follow a strict template
   links = list(par1 = "identity", par2 = "log"),
   fixed_parameters = list(mu = 0),
   priors = list(
-    par1 = list(main = "normal(0, 1)", effects = "normal(0, 0.5)"),
-    par2 = list(main = "normal(0, 0.5)", effects = "normal(0, 0.5)")
+    par1 = list(main = "normal(0, 1)", effects = "normal(0, 0.5)", sd = "exponential(1)"),
+    par2 = list(main = "normal(0, 0.5)", effects = "normal(0, 0.5)", sd = "exponential(2)")
   ),
   init_ranges = list(par1 = c(-1, 1), par2 = c(0.5, 1.5))
 )
@@ -148,20 +181,30 @@ All models in the package are defined as S3 classes and follow a strict template
     class = c("bmmodel", "my_new_model"),
     call = call
   )
-  out$links[names(links)] <- links
+  out <- set_links(out, links)
   out
 }
 ```
 
 The `.my_new_model_defaults` list holds the parameter specification (one such list per version in a version table). Its fields are:
 
--   `parameters` - Named list of model parameters with descriptions
--   `links` - Named list of link functions for each parameter. The available options are `"identity"`, `"log"`, `"softplus"`, `"log1p"`, `"logm1"`, `"inverse"`, `"sqrt"`, `"logit"`, `"probit"`, `"tan_half"` and `"cloglog"` (`R/helpers-parameters.R:76`). `"softplus"`, added in 1.3.2 (#363), is an opt-in alternative to `"log"` for positively-bounded parameters: it keeps the parameter positive but grows linearly rather than exponentially, so predictor effects are additive on the natural scale and large values do not blow up. Users can override any of these per parameter through the model alias's `links` argument
+-   `parameters` - Named list of model parameters with descriptions. List only parameters a user can estimate or fix; a dummy that exists only for brms (see @sec-suppress-mu) stays out
+-   `links` - Named list of link functions for each parameter (see @sec-links)
 -   `fixed_parameters` - Named list of parameters fixed to constant values (e.g., `list(mu = 0)`)
--   `priors` - Named list with `main` (intercept) and `effects` (slopes) priors per parameter. The constructor stores this under the model object's `default_priors` field
+-   `priors` - Named list with `main` (intercept), `effects` (slopes) and `sd` (random-effect SDs) priors per parameter (see @sec-default-priors). The constructor stores this under the model object's `default_priors` field
 -   `init_ranges` - Named list of `c(lower, upper)` vectors for MCMC initialization (see @sec-init-ranges)
 
-The constructor copies these into the model object (renaming `priors` to `default_priors`) alongside the response and auxiliary variables (`resp_vars`, `other_vars`), the model metadata (`domain`, `task`, `name`, `citation`, `requirements`), and the `version`. Keeping the fields inline means a new field on the model object is a one-line addition you can see and copy directly; the trade-off is that older models need updating when a field is added (a periodic, mechanical refactor).
+The constructor copies these into the model object (renaming `priors` to `default_priors`) alongside the response and auxiliary variables (`resp_vars`, `other_vars`), the model metadata (`domain`, `task`, `name`, `citation`, `requirements`), and the `version`. A test checks that every constructor lists these fields in exactly this order and can be called with no arguments.
+
+`domain` does more than document: `supported_models()`, the README and the website group models into tasks by it, so reuse the string of the models yours belongs with. Keeping the fields inline means a new field on the model object is a one-line addition you can see and copy directly; the trade-off is that older models need updating when a field is added (a periodic, mechanical refactor).
+
+### Links {#sec-links}
+
+Each parameter's link maps the scale Stan samples on to the scale the parameter is interpreted on. bmm implements `"identity"`, `"log"`, `"softplus"`, `"log1p"`, `"logm1"`, `"inverse"`, `"sqrt"`, `"logit"`, `"probit"`, `"cloglog"` and `"tan_half"`; a model may also declare `"loglog"` or `"softmax"` as its own default, but users cannot ask for them. `"softplus"` is an opt-in alternative to `"log"` for positive parameters: it grows linearly rather than exponentially, so predictor effects are additive on the natural scale and large values do not overflow.
+
+Users change links through the alias's `links` argument, and the constructor assigns them with `set_links()`. It refuses a name that is not a parameter (a one-edit typo is repaired, with a warning), refuses a link the model cannot apply, and warns when the new link admits values the default excludes, such as `identity` for a positive parameter. `check_model()` runs the same validation on links assigned after construction (`model$links <- ...`).
+
+Which links a user may change is up to the model. The default is all of them. A model that writes its links into the family, the Stan code or the non-linear formulas, rather than reading them from `model$links` at fit time, declares that with a `settable_links()` method returning `character(0)` or the subset that does work; otherwise a user's link would show in `print()` and in the priors while the sampler ignored it. SDM, the mixture models and the IMM return `character(0)`; the SDT models return the parameters whose links reach the likelihood.
 
 Each model is accompanied by a user-facing alias, the documentation of which is generated automatically based on the info list in the model definition.
 
@@ -171,12 +214,13 @@ Each model is accompanied by a user-facing alias, the documentation of which is 
 # automatically based on the information in the .model_modelname()$info
 #' @title `r .model_my_new_model()$name`
 #' @name my_new_model
-#' @details `r model_info(.model_my_new_model())`
+#' @details `r model_docs(.model_my_new_model())`
 #' @param resp_var1 A description of the response variable
 #' @param required_arg1 A description of the required argument
 #' @param required_arg2 A description of the required argument
 #' @param ... used internally for testing, ignore it
 #' @return An object of class `bmmodel`
+#' @keywords bmmodel
 #' @export
 #' @examples
 #' \dontrun{
@@ -192,7 +236,7 @@ my_new_model <- function(resp_var1, required_arg1, required_arg2,
 }
 ```
 
-For a versioned model, the alias instead carries a `version = c("v1", "v2")` argument validated with `version <- match.arg(version)`, and passes the chosen `version` on to the constructor (see `cswald` for a worked example). `use_model_template()` generates whichever variant you ask for via its `versions` argument.
+For a versioned model, the alias instead carries a `version = c("v1", "v2")` argument validated with `version <- match.arg(version)`, and passes the chosen `version` on to the constructor (see `cswald` for a worked example). Every versioned model validates this way, so an unknown version fails where the user typed it and an unambiguous abbreviation works. `use_model_template()` generates whichever variant you ask for via its `versions` argument.
 
 Then users can fit the model using the `bmm()` function, and the model will be automatically recognized and handled by the package:
 
@@ -229,7 +273,12 @@ The current model families and their class chains are:
 
 -   `m3` (ss): `c("bmmodel", "m3", "m3_ss")`
 
-Intermediate classes like `"circular"` and `"non_targets"` allow shared `check_data` methods (e.g., `check_data.circular` validates that responses are in radians, `check_data.non_targets` validates non-target feature columns). S3 methods chain via `NextMethod()` from general to specific: dispatch walks the class vector left to right, so `check_data.bmmodel` runs first and the model-specific method runs last. See the worked dispatch chain in @sec-example-model.
+**Signal detection models:**
+
+-   `sdt_yn`: `c("bmmodel", "sdt", "sdt_yn")`; likewise `sdt_mafc`, `sdt_ranking` and `sdt_cdp`
+-   `sdt_rating` (standard): `c("bmmodel", "sdt", "sdt_rating", "sdt_rating_standard")`
+
+Intermediate classes like `"circular"`, `"non_targets"` and `"sdt"` allow shared methods (e.g., `check_data.circular` validates that responses are in radians, `check_data.non_targets` validates non-target feature columns, `check_formula.sdt` refuses the stimulus column as a predictor, and the shared SDT helpers live in `R/helpers-sdt.R`). Some infrastructure also keys on them: a model with class `"circular"` refuses `posterior_epred()`. S3 methods chain via `NextMethod()` from general to specific: dispatch walks the class vector left to right, so `check_data.bmmodel` runs first and the model-specific method runs last. See the worked dispatch chain in @sec-example-model.
 
 ## S3 methods
 
@@ -252,13 +301,15 @@ The key S3 generics in the pipeline are:
 | `check_formula` | `(model, data, formula)` | `bmmformula.R` |
 | `configure_model` | `(model, data, formula)` | `helpers-model.R` |
 | `configure_prior` | `(model, data, formula, user_prior, ...)` | `helpers-prior.R` |
-| `create_initfun` | `(model, data, formula)` | `helpers-inits.R` |
+| `create_initfun` | `(model, data, formula, prior = NULL, ...)` | `helpers-inits.R` |
 | `postprocess_brm` | `(model, fit, ...)` | `helpers-postprocess.R` |
 | `bmf2bf` | `(model, formula)` | `bmmformula.R` |
 
-Match these signatures exactly in your methods, including the `...` where the generic has one and the `= NULL` defaults on `check_model`. `R CMD check` compares every method against its generic, and a method that drops an argument the generic declares is reported under "checking S3 generic/method consistency". Every method in the package follows this: all four `configure_prior.*` methods carry `...`, and both `check_model.*` methods carry the defaults.
+Match these signatures exactly in your methods, including the `...` where the generic has one and the `= NULL` defaults on `check_model`. `R CMD check` compares every method against its generic, and a method that drops an argument the generic declares is reported under "checking S3 generic/method consistency".
 
-The `bmf2bf` generic converts a `bmmformula` to a `brmsformula`. Most models use the default `bmf2bf.bmmodel` method, but some models require custom methods to handle response variable wrapping (e.g., `bmf2bf.ddm` wraps the response as `rt | dec(response) ~ 1`) or multiple response variables (e.g., `bmf2bf.ezdm_3par` packs variables via `vreal()`, `vint()`, `trials()`). Currently, model-specific `bmf2bf` methods exist for: `ddm`, `cswald`, `ezdm_3par`, `ezdm_4par`, and `m3`.
+Beyond the pipeline, a handful of generics let a model extend what happens after the fit: `revert_check_data()` (see @sec-revert-check-data), `settable_links()` (see @sec-links), `pp_observables()` and `pp_simulate()`, `native_transform()` and `data_check_findings()`. Each has a default that covers most models; @sec-add-new-model says when to write a method.
+
+The `bmf2bf` generic converts a `bmmformula` to a `brmsformula`. Models with a single response use the default `bmf2bf.bmmodel` method. Models with response wrapping (e.g., `bmf2bf.ddm` builds `rt | dec(response) ~ 1`) or several response variables (e.g., `bmf2bf.ezdm_3par` and `bmf2bf.sdt_yn` pack them with `vreal()`, `vint()`, `trials()`) define their own.
 
 The `configure_model` method must return a named list via `nlist()`. The required and optional fields are:
 
@@ -268,7 +319,7 @@ The `configure_model` method must return a named list via `nlist()`. The require
 
 Initial values are **not** returned by `configure_model` — they are handled by `create_initfun()` in a separate pipeline step.
 
-## Data flow: the attribute bridge pattern
+## Data flow: the attribute bridge pattern {#sec-attribute-bridge}
 
 A key architectural pattern is how information flows between `check_data()` and `configure_model()`. Since these are separate S3 methods, they cannot share local variables. Instead, `check_data` stores computed values as **attributes on the data frame**, and `configure_model` retrieves them.
 
@@ -284,7 +335,7 @@ lure_idx <- attr(data, "lure_idx_vars")
 
 This is the way to pass model-specific metadata between pipeline steps. If your `check_data` method computes something that `configure_model` needs (e.g., the maximum set size, index variables, or transformed columns), store it as a data attribute.
 
-Two qualifications. First, the infrastructure uses the same channel for its own bookkeeping: `check_data.bmmodel` sets `data_name` and `checked` on the data frame (`R/helpers-data.R:51-52`), so do not assume the attributes you find there are all yours. Second, an attribute is not a guarantee. A `configure_model` method can be called directly, bypassing `check_data` entirely, and then the attribute is absent. `configure_model.sdm` handles this by recomputing rather than failing:
+Two qualifications. First, the infrastructure uses the same channel for its own bookkeeping: `check_data.bmmodel` sets `data_name` and `checked` on the data frame, so do not assume the attributes you find there are all yours. Second, an attribute is not a guarantee. A `configure_model` method can be called directly, bypassing `check_data` entirely, and then the attribute is absent. `configure_model.sdm` handles this by recomputing rather than failing:
 
 ``` r
 run_metadata <- attr(data, "sdm_run_metadata")
@@ -296,7 +347,18 @@ if (is.null(run_metadata)) {
 
 Whether to guard this way is a judgement call. It costs a little duplicated computation and it means the expensive part has to live in a function both methods can call, which is good structure anyway. If you do not guard, make the failure loud rather than silent.
 
-## Default priors structure
+## Re-running `check_data()` in `update()` {#sec-revert-check-data}
+
+`update(fit)` without `newdata` refits on the data stored in the fit. That is brms's model frame, `fit$data`: it holds only the variables the formula uses, and it is already the *output* of your `check_data()`. Running `check_data()` on it again fails for any model whose check adds, renames or packs columns — a count model that packs its responses into one matrix column, say.
+
+So `update()` first calls `revert_check_data(model, data)` to bring the stored frame back into the shape the user's data had, then runs the usual `check_data()`. The default method returns the data unchanged, which is right for a `check_data()` that only validates. If yours changes columns, write a method in `R/update.R`. Two rules hold for every method:
+
+-   End with `NextMethod("revert_check_data")`, as `check_data` methods do, so that a method on a shared class (`non_targets`, `sdt`) still runs.
+-   brms keeps only the columns the fitted formula uses, so a column your `check_data()` needs may be missing from the stored frame (the `set_size` column of a non-target model, the `m` column of `sdt_mafc`). A method that has to recompute such a column names it in the `"rebuilt"` attribute of the data, and `update()` drops it again after the check so a new formula cannot pick it up. Append to that attribute; do not overwrite it, or you erase what a method earlier in the chain recorded.
+
+`revert_check_data.m3` and the SDT methods are the examples. A test (`"every supported model has a stored-frame case"` in `tests/testthat/test-update.R`) requires each model to have a case in `stored_frame_cases()`; further tests in the same file run every case and check that the reverted frame reproduces the fit's Stan data.
+
+## Default priors structure {#sec-default-priors}
 
 The `default_priors` field in model definitions has a specific structure that the `configure_prior()` method interprets:
 
@@ -305,24 +367,25 @@ default_priors = list(
   kappa = list(
     main = "student_t(5, 1.75, 0.75)",  # prior for Intercept
     effects = "normal(0, 1)",            # prior for regression coefficients
-    sd = "exponential(1)"               # prior for random effect SDs (optional)
+    sd = "exponential(1)"                # prior for random effect SDs
   ),
   c = list(
     main = "student_t(5, 2, 0.75)",
-    effects = "normal(0, 1)"
+    effects = "normal(0, 1)",
+    sd = "exponential(1)"
   )
 )
 ```
 
--   **`main`**: Applied to the Intercept of the parameter. If the user suppresses the intercept (e.g., `kappa ~ 0 + condition`), this prior is applied to each level of the factor instead.
+-   **`main`**: Applied to the Intercept of the parameter. If the user suppresses the intercept (e.g., `kappa ~ 0 + condition`), this prior is applied to each level of the factor instead. Keep it the first element: without an intercept, it is found by position.
 -   **`effects`**: Applied to regression coefficients (slopes). If omitted, brms default priors are used for effects.
--   **`sd`**: Applied to all random effect standard deviations for this parameter. This is optional — if omitted, brms default priors apply.
+-   **`sd`**: Applied to all random-effect standard deviations of this parameter. Every model in bmm declares one, except the custom version of M3, which has no default priors at all. If you omit it, the parameter falls back to brms' `student_t(3, 0, 2.5)`, which on a log link lets individual values vary by a factor of 12 around the group value. The shipped models use `exponential()` on the link scale: rate 1 for sensitivity, memory-strength, mixing-weight and identity-linked drift parameters; rate 2 for criteria and thresholds, boundary, non-decision time, start point and log-linked drift parameters; rate 4 for circular bias.
 
-The priors use the same string format as `brms::set_prior()`. These defaults are automatically applied by `bmm()` unless the user explicitly overrides them via the `prior` argument.
+The priors use the same string format as `brms::set_prior()`. These defaults are automatically applied by `bmm()` unless the user explicitly overrides them via the `prior` argument. Whenever a model estimates correlations among random effects, they get `lkj(2)`; nothing in the model definition is needed for that.
 
 For parameters listed in `fixed_parameters` that also appear in `parameters` (e.g., `mu1` in the IMM, which is fixed by default but can be estimated), the fixed value takes precedence unless the user provides a formula for that parameter.
 
-## Suppressing `mu` for models without a location parameter
+## Suppressing `mu` for models without a location parameter {#sec-suppress-mu}
 
 The `brms` package requires every custom family to have a `mu` parameter (the location parameter). However, some models -- particularly response time and decision models like DDM, EZDM, and cswald -- do not have a natural location/mu parameter. These models suppress `mu` rather than arbitrarily promoting one of their parameters to it:
 
@@ -339,9 +402,9 @@ Earlier versions tracked this with a `void_mu` flag in the model definition. The
 
 ## The `init_ranges` field and `create_initfun()` {#sec-init-ranges}
 
-Models with custom families often require carefully chosen initial values for stable MCMC sampling. When a model's likelihood has hard boundaries or regions of zero density, the default brms initialization -- which draws from a wide symmetric range -- will often place chains in impossible territory, causing immediate divergences or chain failures.
+brms' default initialization draws every parameter from a wide symmetric range on the sampling scale. When a model's likelihood has hard boundaries or regions of zero density, that often places chains in impossible territory, causing immediate divergences or chain failures.
 
-This is particularly relevant for response time models, where parameters have hard constraints relative to the observed data. For example, the non-decision time parameter `ndt` must be positive *and* smaller than the fastest observed RT -- otherwise the implied decision time would be negative and the likelihood undefined. Similarly, boundary separation (`bound`) must be strictly positive and within a plausible range, and extreme drift rate values can cause numerical overflow in the Wiener likelihood. Circular models (mixture2p, mixture3p) typically do not have these issues and work fine with default initialization.
+This is particularly relevant for response time models, where parameters have hard constraints relative to the observed data. For example, the non-decision time parameter `ndt` must be positive *and* smaller than the fastest observed RT -- otherwise the implied decision time would be negative and the likelihood undefined. Similarly, boundary separation (`bound`) must be strictly positive and within a plausible range, and extreme drift rate values can cause numerical overflow in the Wiener likelihood.
 
 The `init_ranges` field in the model definition addresses this by specifying narrow, safe windows on the native (pre-link-transform) scale:
 
@@ -354,21 +417,26 @@ init_ranges = list(
 )
 ```
 
-Each entry maps a parameter name to a `c(lower, upper)` range. The `create_initfun()` S3 generic (defined in `R/helpers-inits.R`) uses these ranges to generate an initialization function that:
+Each entry maps a parameter name to a `c(lower, upper)` range. `create_initfun.default()` (in `R/helpers-inits.R`) parses the Stan code for every parameter's dimensions and returns an initialization function that gives every Stan parameter it can size a value (the rest are left to the sampler):
 
-1.  Parses the Stan code to determine parameter dimensions and types
-2.  Generates initial values for intercepts within the specified ranges (applying link transformations)
-3.  Generates small random values for regression coefficients, random effect SDs, and correlation matrices
+1.  Random effects start tight: standard deviations between 0.05 and 0.1, standardized effects near zero, correlation matrices at the identity.
+2.  Population-level parameters with an `init_ranges` entry start inside that range. The range is on the native scale (for softmax mixing weights, on the sampling scale), and it is transformed through the parameter's link and clipped to what the link can represent, so a range stays valid when the user changes the link. With predictors, the coefficients are solved so that each design cell starts inside the range.
+3.  Everything else gets brms' default draw.
 
-If `init_ranges` is `NULL` (the default), `create_initfun` returns `1`, which tells brms to use its default initialization. Most circular models (mixture2p, mixture3p) do not need custom initialization, but RT models (DDM, EZDM, cswald) and SDM do.
+So `init_ranges` is optional, and per parameter: declare a range for the parameters whose likelihood needs one, and leave out the rest. The mixture models and the IMM set theirs to the central 50% of the main default prior, which is a sensible default when you have no data-driven constraint.
 
-The conversion between native and sampling scales is handled by `link_transform()` (defined in `R/helpers-parameters.R`). It supports all link functions used by bmm models (identity, log, softplus, log1p, logm1, inverse, sqrt, logit, probit, tan_half, cloglog) and can apply transformations in either direction -- from the scale on which parameters are interpretable (native) to the scale on which Stan samples (sampling), and back. Model developers rarely need to call it directly; it is used automatically by `create_initfun()` when generating initial values, and by the post-processing infrastructure when converting estimates back to the native scale.
+The conversion between native and sampling scales is handled by `link_transform()` (defined in `R/helpers-parameters.R`). It supports every elementwise link bmm uses (softmax weights are transformed jointly elsewhere) and can apply transformations in either direction -- from the scale on which parameters are interpretable (native) to the scale on which Stan samples (sampling), and back. Model developers rarely need to call it directly; it is used automatically by `create_initfun()` when generating initial values, and by the post-processing infrastructure when converting estimates back to the native scale.
 
-## Within-chain threading
+## Within-chain threading {#sec-threading}
 
-Passing `threads` to `bmm()` asks brms to split each chain's likelihood evaluation across cores. For most models nothing is needed: brms slices the data and calls the family's likelihood inside `partial_log_lik`, and a custom family written the usual way comes along for the ride. A model that injects Stan code through `stanvar()` is the exception, because that code has to be written differently depending on whether it ends up inside `partial_log_lik` or in the model block.
+Passing `threads` to `bmm()` asks brms to split each chain's likelihood evaluation across cores. brms slices the response and calls the family's likelihood inside `partial_log_lik`, where the row bounds `start` and `end` exist. Two things it does *not* slice, and a model has to handle itself:
 
-SDM is the one model in 1.3.2 that does this; the `NEWS.md` entry reports it as reducing fitting time by up to ~45% in benchmarks (#374). It is worth reading if your model has a likelihood with a normalizing constant computed over groups of rows, because the same three pieces will apply.
+-   **A custom family's `vars`.** brms pastes them in as written, so a vectorized (`loop = FALSE`) likelihood would receive the whole vector next to a slice of the response. cswald therefore passes `vars = "dec[start:end]"` when threading and `"dec"` otherwise.
+-   **Stan code injected through `stanvar()`**, which has to be written differently depending on whether it ends up inside `partial_log_lik` or in the model block.
+
+Both decisions rest on one predicate, `brms_slices_likelihood()` in `R/utils.R`. It reads the `brms.threads` option that `local_brms_threads()` set at the top of `bmm()`, normalizes it as brms does (a bare number means `threading(n)`), and is `FALSE` for `threading(force = TRUE)`: in that case brms compiles with threading support but emits *unsliced* code, so `start` and `end` do not exist. Call it in `configure_model()`; do not read the option yourself. SDM, cswald and `sdt_mafc` are the models that use it.
+
+SDM is the fullest example, worth reading if your model has a likelihood with a normalizing constant computed over groups of rows:
 
 **1. Two versions of the chunk.** `inst/stan_chunks/` holds both `sdm_simple_likelihood.stan` and `sdm_simple_likelihood_threaded.stan`. The threaded one calls a `_slice` variant of the same function and passes `start` and `end`, the row bounds brms makes available inside `partial_log_lik`:
 
@@ -382,21 +450,19 @@ target += sdm_simple_run_ldenom_slice(c, kappa, COSN, start, end,
                                       sdm_run_count);
 ```
 
-**2. A predicate that decides which one to read.** `configure_model.sdm` selects the file at configuration time:
+**2. The predicate decides which one to read**, at configuration time:
 
 ``` r
-likelihood_file <- if (sdm_use_threaded_likelihood()) {
+likelihood_file <- if (brms_slices_likelihood()) {
   "sdm_simple_likelihood_threaded.stan"
 } else {
   "sdm_simple_likelihood.stan"
 }
 ```
 
-The predicate reads the `brms.threads` option that `local_brms_threads()` set at the top of `bmm()` (`R/model_sdm.R:234-246`). It has to normalize the option the same way brms does, because brms accepts a bare number where `brms::threading()` is expected; if it did not, `brm()` would thread while bmm emitted the serial chunk.
+**3. Data that the threaded function needs** must also be declared for the partial-log-likelihood signature, via the `pll_args` argument to `stanvar()`. SDM passes `"data matrix COSN"` for its precomputed cosine matrix and, through the helper `sdm_stanvar_int_array()`, `"data array[] int <name>"` for the run-index arrays. A variable that is not declared in `pll_args` is simply not in scope inside `partial_log_lik`, and the model will not compile.
 
-**3. `threading(force = TRUE)` is a separate case.** With `force = TRUE`, brms compiles with threading support but emits *unsliced* code — there is no `partial_log_lik`, so `start` and `end` do not exist and the sliced chunk fails to compile. The predicate therefore ends with `&& !isTRUE(threads$force)`, and SDM emits its serial likelihood in that case. This was a bug fix in 1.3.2; if you write a threaded chunk, test `threading(2, force = TRUE)` explicitly, because it is not the case you will think to try.
-
-Data that the threaded function needs must also be declared for the partial-log-likelihood signature, via the `pll_args` argument to `stanvar()`. SDM passes `"data matrix COSN"` for its precomputed cosine matrix and, through the helper `sdm_stanvar_int_array()`, `"data array[] int <name>"` for the run-index arrays. A variable that is not declared in `pll_args` is simply not in scope inside `partial_log_lik`, and the model will not compile.
+Test the generated Stan code with no `threads`, with `threads = 2`, and with `threading(2, force = TRUE)`; the last is the case you will not think to try. `test-model_sdm-stancode.R` does all three.
 
 ## Version tables
 
@@ -435,7 +501,7 @@ The table is the single source of truth for the version-specific specification. 
 
 ### M3 nests the table one level deeper {.unnumbered}
 
-The shape above is not universal, and M3 is the exception you will hit if you build a model whose parameterization depends on something other than the version. In `.m3_version_table` (`R/model_m3.R:6-49`), `links` and `priors` are indexed by the **choice rule** before the parameter:
+The shape above is not universal, and M3 is the exception you will hit if you build a model whose parameterization depends on something other than the version. In `.m3_version_table`, `links` and `priors` are indexed by the **choice rule** before the parameter:
 
 ``` r
 links = list(
@@ -448,17 +514,17 @@ priors = list(
 )
 ```
 
-so the constructor indexes twice: `.m3_version_table[[version]][["links"]][[choice_rule]]` (`R/model_m3.R:81-82`). Three further departures in the same constructor are worth knowing before you copy it as a template:
+so the constructor indexes twice: `.m3_version_table[[version]][["links"]][[choice_rule]]`. Three further departures in the same constructor are worth knowing before you copy it as a template:
 
--   `fixed_parameters` is not in the table at all. It is computed inline from the choice rule: `list(b = if (choice_rule == "softmax") 0 else 0.1)` (`:76-78`).
--   `parameters` is the table entry with a background-activation parameter `b` prepended in the constructor, because every M3 version has it (`:73-75`).
+-   `fixed_parameters` is not in the table at all. It is computed inline from the choice rule: `list(b = if (choice_rule == "softmax") 0 else 0.1)`.
+-   `parameters` is the table entry with a background-activation parameter `b` prepended in the constructor, because every M3 version has it.
 -   The table holds no `init_ranges`, and it has entries for `ss` and `cs` only. M3's default version is `"custom"`, which is not in the table — the indexing returns `NULL` and the user supplies the specification. That is deliberate, not an omission.
 
 If your model needs a second axis of variation, this is what it looks like. If it does not, keep the single-level shape the template generates.
 
 ### Not every model uses either pattern {.unnumbered}
 
-Four of the eight released models — `sdm`, `mixture2p`, `mixture3p` and `imm` — carry no `.{model}_defaults` object and no version table. They write `parameters`, `links`, `fixed_parameters`, `default_priors` and `init_ranges` as literal lists inside the constructor (see `R/model_sdm.R:5-44`). The separated specification is the pattern for new models and the one `use_model_template()` generates; the inline models are simply older. Do not conclude the book is wrong when you open `R/model_sdm.R` and find no defaults list.
+`sdm`, `mixture2p`, `mixture3p`, `imm` and most of the signal detection models carry no `.{model}_defaults` object and no version table. They write `parameters`, `links`, `fixed_parameters`, `default_priors` and `init_ranges` as literal lists inside the constructor. The separated specification is the one `use_model_template()` generates and the one to use for a new model; the inline models predate it or were written alongside it. Do not conclude the book is wrong when you open `R/model_sdm.R` and find no defaults list.
 
 ## File organization
 
@@ -468,13 +534,13 @@ The `bmm` package is organized into several files. The main files are:
 
 It contains the main function for fitting models, `bmm()`. This function is the main entry point for users to fit models. It is set-up to be independent of the specific models that are implemented in the package.
 
-To add new models, you do not have to edit this file. The functions above are generic S3 methods, and they will automatically recognize new models if you add appropriate methods for them (see section [Adding new models](#adding-new-models-to-bmm)).
+To add new models, you do not have to edit this file. The functions above are generic S3 methods, and they will automatically recognize new models if you add appropriate methods for them (see @sec-add-new-model).
 
 ### `R/helpers-*.R` {.unnumbered}
 
 `R/helpers-data.R`, `R/helpers-inits.R`, `R/helpers-model.R`, `R/helpers-parameters.R`, `R/helpers-postprocess.R`, and `R/helpers-prior.R`
 
-These files define the main generic S3 methods for checking data, creating initial value functions, configuring the model, extracting parameters, post-processing the fitted model, and combining priors. They contain the default methods for these functions, which are called by `bmm()` if no specific method is defined for a model. If you want to add a new model, you will need to add specific methods for these functions for your model. *You do not need to edit these files to add a new model.*
+These files define the main generic S3 methods for checking data, creating initial value functions, configuring the model, extracting parameters, post-processing the fitted model, and combining priors. They contain the default methods for these functions, which are called by `bmm()` if no specific method is defined for a model. A new model adds its own methods in its model file. The exceptions are a few central tables in `R/helpers-model.R` (`data_column_roles`, `response_annotations()`) and, where your `check_data()` changes columns, a `revert_check_data()` method in `R/update.R`; the checklist in @sec-add-new-model lists them.
 
 `R/helpers-data.R` also contains several user-facing utility functions for response time data preparation. These follow a deliberate design philosophy: each function performs one well-defined task without combining too many features. They are composable -- users can pipe them together into a workflow but also inspect intermediate results at each step:
 
@@ -490,46 +556,37 @@ In addition, it contains the definition of the `bmf2bf` S3 method that is used t
 
 ### `R/model_*.R` {.unnumbered}
 
-Each model and its methods are defined in a separate file. The current model files are:
+Each model and its methods live in one file named `model_<model_name>.R`: the specification, the internal constructor, the user-facing alias, the model-specific S3 methods, and the `log_lik`, `posterior_predict` and `posterior_epred` functions of a custom family. `use_model_template()` creates the file for you (see @sec-add-new-model). `supported_models()` lists the current models; `R/model_ddm.R` (flat specification), `R/model_cswald.R` (version table) and `R/model_sdt_yn.R` (aggregated counts) are good files to read first.
 
--   `model_mixture2p.R` - Two-parameter mixture model
--   `model_mixture3p.R` - Three-parameter mixture model
--   `model_imm.R` - Interference Measurement Model (versions: full, bsc, abc)
--   `model_sdm.R` - Signal Discrimination Model
--   `model_ddm.R` - Diffusion Decision Model
--   `model_ezdm.R` - EZ-Diffusion Model (versions: 3par, 4par)
--   `model_cswald.R` - Censored-Shifted Wald Model (versions: simple, crisk)
--   `model_m3.R` - Multinomial Memory Measurement Model (versions: ss, cs, custom)
-
-Each file contains the internal model constructor, the user-facing alias, and model-specific S3 methods. Your new model will exist in a file like this. The name of the file should be `model_name_of_your_model.R`. You don't have to add this file manually - see section [Adding new models](#adding-new-models-to-bmm).
+Code shared by a family of models goes in a helpers file named for it, as `R/helpers-sdt.R` does for the signal detection models.
 
 ### `R/distributions.R` {.unnumbered}
 
-This file contains the definition of the custom distributions used in the package. It specifies the density (`d*`), random number generation (`r*`), cumulative probability (`p*`), and quantile (`q*`) functions for each model's distribution. Currently implemented distributions include: `sdm`, `mixture2p`, `mixture3p`, `imm`, `m3`, `ddm`, `ezdm`, and `cswald`. If your model requires a custom distribution, you will need to add it to this file. These are not used during model fitting, but are used to generate data from the model and for posterior predictive checks.
+The density (`d*`), random generation (`r*`) and, where available, distribution (`p*`) and quantile (`q*`) functions of each model. They are not used by the Stan fit, but they simulate data, back `log_lik`, `posterior_predict` and `posterior_epred`, and drive the plots. A custom family needs at least `d*` and `r*` here.
 
-### `R/conditional_effects.R`, `R/emmeans.R`, `R/pp_check.R` {.unnumbered}
+### Post-processing {.unnumbered}
 
-Post-processing infrastructure for fitted `bmmfit` objects:
+These files work on fitted `bmmfit` objects and need no edits for a new model; the extension points they offer are listed in @sec-add-new-model.
 
--   `conditional_effects.R` - `conditional_effects()` method for visualizing marginal effects
--   `emmeans.R` - Integration with the `emmeans` package for estimated marginal means
--   `pp_check.R` - Posterior predictive checking, including custom support for multinomial models
+-   `conditional_effects.R`, `emmeans.R` - marginal effects and estimated marginal means
+-   `helpers-postprocess.R` - `postprocess_brm()`, `posterior_epred()` and `fitted()`
+-   `helpers-parameters.R` - `parameter_info()`, `native_parameters()`, `native_transform()` and `link_transform()`
+-   `helpers-prior.R` - default priors, `default_prior()` and `prior_info()`
+-   `pp_check.R`, `pp_observables.R` - posterior predictive checks, including checks of several observables per model
+-   `helpers-analysis.R`, `plot.R` - the signal detection post-processing (ROC, AUC, latent distributions) and its plots
+-   `report-extract.R` - `model_citation()`, which returns a model's `citation` references for a user's reference list
+-   `update.R`, `restructure.R` - refitting, and bringing fits saved by older versions up to date
 
-These work automatically for most models and do not need to be edited when adding a new model.
+### `R/data_check.R`, `R/bmm_setup.R` {.unnumbered}
 
-### `R/utils.R`, `R/brms-misc.R`, `R/restructure.R`, `R/summary.R`, `R/update.R` {.unnumbered}
+`bmm_data_check()` runs the validation pipeline on a dataset without compiling the model and prints a report; models add their own diagnostics through `data_check_findings()`. `bmm_setup()` checks the user's toolchain and Stan backend.
+
+### `R/utils.R`, `R/brms-misc.R`, `R/summary.R` {.unnumbered}
 
 Various utility functions. Note that `R/brms-misc.R` is a read-only vendored copy from brms and should not be edited.
 
 ### `inst/stan_chunks/` {.unnumbered}
 
-This directory contains the Stan code chunks that are passed to the `brms::stanvar()` function. These define the custom likelihoods and helper functions for models that require custom brms families. Current Stan files:
-
--   `sdm_simple_funs.stan`, `sdm_simple_tdata.stan`, `sdm_simple_likelihood.stan`, `sdm_simple_likelihood_threaded.stan` - SDM model
--   `ddm_functions.stan` - DDM model (Wiener process likelihood)
--   `ezdm_3par_functions.stan`, `ezdm_4par_functions.stan` - EZDM model
--   `cswald_simple_functions.stan`, `cswald_crisk_functions.stan`, `cswald_helper_functions.stan` - cswald model
+The Stan code passed to `brms::stanvar()`: custom likelihoods and helper functions for models with a custom brms family. Files are named `{model_name}_{block}.stan` (e.g., `my_model_functions.stan`), and code shared by several models gets a file of its own (`sdt_dist_funs.stan`).
 
 When writing Stan code for bmm, keep in mind that Stan's HMC sampler requires continuous gradients to function correctly. Non-differentiable operations -- such as `fabs()` or `fmax()` -- create discontinuities in the log-density surface that can cause divergent transitions or break sampling entirely. Where such operations are mathematically necessary, bmm uses smooth approximations instead. For example, `sqrt(x^2 + epsilon)` serves as a differentiable stand-in for `|x|`. This is a standard Stan modelling technique and should be applied whenever your model's likelihood involves non-smooth functions.
-
-If you add a new model with a custom family, you will need to add Stan chunks to this directory. The naming convention is `{model_name}_{block}.stan` (e.g., `my_model_functions.stan`).

@@ -19,6 +19,8 @@ install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOpt
 cmdstanr::install_cmdstan()
 ```
 
+Once bmm is loaded, `bmm_setup()` checks the C++ toolchain, `cmdstanr` with CmdStan, `rstan`, and the backend `bmm()` will use; it then compiles and samples a small test model and suggests a fix for every check that failed. Run it before your first fit.
+
 ## Package development with devtools
 
 Development runs on the `devtools` package, and the steps below are the same whichever editor you work in. The repository ships a `bmm.Rproj` file, so opening it starts a session with the package root as the working directory in RStudio or Positron; opening the directory in any other editor, or starting R in it from a terminal, gets you to the same place. A great tutorial on package development can be found [here](https://r-pkgs.org/). Below is a summary of the most important steps
